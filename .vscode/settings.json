@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "/Users/sandeepghosh/Documents/personal-projects/rust/algo-trading/Cargo.toml",
+        "./Cargo.toml",
+        "./Cargo.toml"
+    ]
+}
