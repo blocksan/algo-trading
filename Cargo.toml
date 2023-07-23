@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 csv = "1.1.6"
 linked-hash-map = "0.5"
+plotters = "0.3.5"
+chrono = "0.4.26"
+redis = "0.23.0"
+once_cell = "1.8"

@@ -1,5 +1,5 @@
 
-#[path = "../trade/mod.rs"] mod trade;
+#[path = "../common/trade/mod.rs"] mod trade;
 use self::trade::trade::Trade;
 pub enum MarketTrend{
     Bullish,
