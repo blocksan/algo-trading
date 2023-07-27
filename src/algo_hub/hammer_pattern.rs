@@ -1,13 +1,14 @@
 
 #[path = "../common/mod.rs"] mod common;
-use crate::common::enums::TradeType;
+use crate::common::enums::{AlgoTypes, TradeType};
 use crate::common::number_parser::return_2_precision_for_float;
 use crate::common::raw_stock::RawStock;
-use crate::common::algo_types::AlgoTypes;
 use crate::common::date_parser;
 use crate::order_manager::trade_signal_keeper::TradeSignal;
+use mongodb::Collection;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct HammerCandle {
     pub symbol: String,
     pub date: String,
@@ -85,7 +86,7 @@ impl HammerPatternUtil {
         self.hammer_pattern_ledger.clone()
     }
 
-    pub fn calculate_and_add_ledger(&mut self, stock: &RawStock) -> () {
+    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, hammer_candle_collection: Collection<HammerCandle>) -> () {
         if self.hammer_pattern_ledger.len() > 0 {
             ()
         }
@@ -93,7 +94,7 @@ impl HammerPatternUtil {
         HammerPatternUtil::calculate_candle_metadata(stock.open, stock.high, stock.low, stock.close);
 
         if is_hammer_candle {
-            let hammer_pattern = HammerCandle::new(
+            let hammer_candle = HammerCandle::new(
                 stock.symbol.clone(),
                 stock.date.clone(),
                 stock.open,
@@ -106,7 +107,15 @@ impl HammerPatternUtil {
                 calculated_body_size_ratio,
                 date_parser::new_current_date_time_in_desired_stock_datetime_format()
             );
-            self.add_into_hammer_pattern_ledger(hammer_pattern);
+
+            match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
+                Ok(_) => {
+                    println!("Hammer candle inserted into the database");
+                },
+                Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
+            }
+
+            self.add_into_hammer_pattern_ledger(hammer_candle);
             ()
         }
         
