@@ -1,7 +1,9 @@
-use crate::common::{raw_stock::RawStock, algo_types::AlgoTypes, enums::TradeType};
+use mongodb::Collection;
 
-#[derive(Debug, Clone)]
+use crate::{common::{raw_stock::RawStock, enums::{AlgoTypes, TradeType}}, algo_hub::hammer_pattern::HammerCandle};
+use serde::{Deserialize, Serialize};
 #[allow(dead_code, unused_variables)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TradeSignal{
     pub raw_stock: RawStock,
     pub trade_position_type: TradeType,
@@ -54,8 +56,19 @@ impl TradeSignalsKeeper{
         }
     }
 
-    pub fn add_trade_signal(&mut self, trade_signal: TradeSignal) {
-        self.trade_signals.push(trade_signal);
+    pub async fn add_trade_signal(&mut self, trade_signal: &TradeSignal, trade_signal_collection: Collection<TradeSignal>) {
+        //TODO: add to the database as well
+        
+        match trade_signal_collection.insert_one(trade_signal.clone(), None).await{
+            Ok(_) => {
+                println!("Trading signal added to the database");
+            },
+            Err(e) => {
+                println!("Error while adding trading signal to the database {}", e);
+            }
+        }
+
+        self.trade_signals.push(trade_signal.clone());
 
     }
 

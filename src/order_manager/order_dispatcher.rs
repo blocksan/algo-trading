@@ -1,9 +1,12 @@
+use mongodb::Collection;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use crate::common::{algo_types::AlgoTypes, enums::TradeType, redis_client::RedisClient, utils, date_parser::new_current_date_time_in_desired_stock_datetime_format};
+use crate::common::{enums::{AlgoTypes,TradeType}, redis_client::RedisClient, utils::{self, symbol_algo_type_formatter}, date_parser::new_current_date_time_in_desired_stock_datetime_format};
 use super::trade_signal_keeper::TradeSignal;
 
 
-#[derive(Debug, Clone, PartialEq)]
+// #[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Order {
     pub symbol: String,
     pub trade_position_type: TradeType,
@@ -91,7 +94,7 @@ impl OrderManager {
         }
     }
 
-    pub fn add_and_dispatch_order(&mut self, trade_signal: TradeSignal) -> Option<Order>{
+    pub async fn add_and_dispatch_order(&mut self, trade_signal: TradeSignal, order_collection: Collection<Order>) -> Option<Order>{
         let order_exists = OrderManager::check_if_order_exists(trade_signal.raw_stock.symbol.clone(), trade_signal.trade_algo_type.clone());
         
         if order_exists {
@@ -99,9 +102,9 @@ impl OrderManager {
             None
         }else{
             let order = Order::new(
-                trade_signal.raw_stock.symbol,
+                trade_signal.raw_stock.symbol.clone(),
                 trade_signal.trade_position_type,
-                trade_signal.trade_algo_type,
+                trade_signal.trade_algo_type.clone(),
                 trade_signal.entry_price,
                 0.0,
                 trade_signal.trade_sl,
@@ -111,13 +114,22 @@ impl OrderManager {
                 trade_signal.total_price,
                 trade_signal.trade_signal_requested_at,
                 "".to_string(),
-                "".to_string(),
+                symbol_algo_type_formatter(trade_signal.raw_stock.symbol.as_str(), trade_signal.trade_algo_type.to_string().as_str()),
                 0.0,
                 false,
             );
 
-            //TODO:: add logic to call the Zerodha API to place the order
+            println!("Order added to the order manager");
 
+            //TODO:: add logic to call the Zerodha API to place the order
+            match order_collection.insert_one(order.clone(), None).await{
+                Ok(_) => {
+                    println!("Order added to the database");
+                },
+                Err(e) => {
+                    println!("Error while adding order to the database {}", e);
+                }
+            }
             self.orders.push(order.clone());
             Some(order)
         }
@@ -177,6 +189,7 @@ impl OrderManager {
         );
 
         let key = utils::symbol_algo_type_formatter(new_order.symbol.as_str(), new_order.trade_algo_type.to_string().as_str());
+        
         self.orders[order_index] = new_order;
 
         let redis_client = RedisClient::get_instance();

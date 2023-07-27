@@ -1,4 +1,5 @@
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(dead_code, unused_variables)]
 pub struct RawStock {
     pub symbol: String,
