@@ -1,4 +1,4 @@
-use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::RawStock};
+use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::RawStock, date_parser};
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,7 +126,9 @@ impl CurrentMarketState {
         match current_market_place {
             Some(current_market_state) => {
                 match current_market_state_collection.insert_one(current_market_state.clone(), None).await {
-                    Ok(_) => {},
+                    Ok(_) => {
+                        println!("Successfully inserted a current_market_place into the collection");
+                    },
                     Err(e) => {
                         println!("Error while inserting a current_market_place into the collection: {:?} error {:?}", current_market_state,e);
                     }
@@ -139,7 +141,26 @@ impl CurrentMarketState {
     }
 
     fn calculate_market_state_for_oneminute(stock: &RawStock) -> Option<CurrentMarketState>{
-        None
+        Some(CurrentMarketState::new (
+            TimeFrame::OneMinute,
+            MarketTrend::Bearish,
+            MarketTrend::Bearish,
+            100.0,
+            200.0,
+            50.0,
+            150.0,
+            2000.0,
+            200.0,
+            300.0,
+            150.0,
+            250.0,
+            3000.0,
+            2,
+            2,
+            "ADANIGREEN".to_owned(),
+            date_parser::new_current_date_time_in_desired_stock_datetime_format(),
+            date_parser::new_current_date_time_in_desired_stock_datetime_format()
+        ))
     }
     fn calculate_market_state_for_threeminutes(stock: &RawStock)->Option<CurrentMarketState>{
         None
