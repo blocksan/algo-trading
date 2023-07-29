@@ -24,14 +24,12 @@ extern crate mongodb;
 extern crate tokio;
 use mongodb::{options::ClientOptions, Client};
 
-use crate::common::{raw_stock::RawStock, date_parser};
+use crate::common::{raw_stock::RawStock, date_parser, enums::ServerUrlTimeFrame};
 use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 
 use std::error::Error;
 use tokio_tungstenite::connect_async;
 use url::Url;
-
-
 
 #[tokio::main]
 async fn main() {
@@ -48,18 +46,30 @@ async fn main() {
 //         // });
 //     }
 //    );
+    
+
     let server_urls = vec![
-        "ws://localhost:5554", //oneminute socket
-        "ws://localhost:5555", //threeminute socket
-        "ws://localhost:5556", //fiveminute socket
-        "ws://localhost:5557", //fifteenminute socket
+        ServerUrlTimeFrame{
+            server_url: "ws://localhost:5554".to_string(), 
+            time_frame: TimeFrame::OneMinute 
+        }, //oneminute socket
+        // ServerUrlTimeFrame{
+        //     server_url: "ws://localhost:5555".to_string(), 
+        //     time_frame: TimeFrame::ThreeMinutes
+        // }, //threeminute socket
+        ServerUrlTimeFrame{
+            server_url: "ws://localhost:5556".to_string(), 
+            time_frame: TimeFrame::FiveMinutes
+        }, //fiveminute socket
+        // "ws://localhost:5556", //fiveminute socket
+        // "ws://localhost:5557", //fifteenminute socket
     ];
     let tasks = server_urls
         .into_iter()
-        .map(|server_url| {
+        .map(|server_url_config| {
             tokio::spawn(async move {
-                if let Err(e) = connect_websocket(server_url).await {
-                    eprintln!("Error connecting to {}: {}", server_url, e);
+                if let Err(e) = connect_websocket(server_url_config.clone()).await {
+                    eprintln!("Error connecting to {:?}: {}", server_url_config.server_url, e);
                 }
             })
         })
@@ -67,19 +77,116 @@ async fn main() {
 
 
     //START -> Oneminute Socket reading code
-    async fn connect_websocket(server_url: &str) -> Result<(), Box<dyn Error>> {
+    async fn connect_websocket(server_url_time_frame: ServerUrlTimeFrame ) -> Result<(), Box<dyn Error>> {
 
-        let (mut ws_stream, _) = connect_async(Url::parse(server_url).unwrap()).await.unwrap();
+        let (mut ws_stream, _) = connect_async(Url::parse(&server_url_time_frame.server_url).unwrap()).await.unwrap();
 
-        println!("Connected to WebSocket server: {}", server_url);
+        println!("Connected to WebSocket server: {}", server_url_time_frame.server_url);
+        let mongo_url = "mongodb://localhost:27017";
+        let database_name = "algo_trading";
+
+        let client_options = ClientOptions::parse(mongo_url).await.unwrap();
+        let client = Client::with_options(client_options).unwrap();
+
+        let db = client.database(database_name);
+
+        // let stock_5_min_data = data_consumer_via_csv::read_5_min_data(FILE_5MIN_PATH).unwrap();
+        let hammer_candle_collection_name = "hammer_candles";
+        let hammer_candle_collection = db.collection::<HammerCandle>(hammer_candle_collection_name);
+
+        let mut hammer_ledger = hammer_pattern::HammerPatternUtil::new();
 
         while let Some(msg) = ws_stream.next().await {
             match msg {
                 Ok(message) => {
                     if message.is_text() {
+                        
                         let text = message.to_text().unwrap();
-                        println!("Received on {} tick: {}",server_url, text);
-                        // Here, you can process the received CSV data or perform any other actions.
+                        
+                        let splitted_text = text.split(",").collect::<Vec<&str>>();
+                        // println!("splitted_text: {:?}",splitted_text);
+                        // continue;
+                        let date = match date_parser::parse_date_in_stock_format(splitted_text[1]){
+                            Ok(date) => Some(date),
+                            Err(e) => {
+                                println!("Error while parsing date {:?}",e);
+                                None
+                            }
+                        };
+
+                        let close = match splitted_text[2].parse::<f32>(){
+                            Ok(close) => Some(close),
+                            Err(e) => {
+                                println!("Error while parsing close {:?}",e);
+                                None
+                            }
+                        };
+
+                        let high = match splitted_text[3].parse::<f32>(){
+                            Ok(high) => Some(high),
+                            Err(e) => {
+                                println!("Error while parsing high {:?}",e);
+                                None
+                            }
+                        };
+
+                        let low = match splitted_text[4].parse::<f32>(){
+                            Ok(low) => Some(low),
+                            Err(e) => {
+                                println!("Error while parsing low {:?}",e);
+                                None
+                            }
+                        };
+
+                        let open = match splitted_text[5].parse::<f32>(){
+                            Ok(open) => Some(open),
+                            Err(e) => {
+                                println!("Error while parsing open {:?}",e);
+                                None
+                            }
+                        };
+                        //removing "\"" from the end of the string to parse the volume correctly => &splitted_text[6][0..splitted_text[6].len()-1]
+                        let volume = match &splitted_text[6][0..splitted_text[6].len()-1].parse::<i32>(){
+                            Ok(volume) => Some(*volume),
+                            Err(e) => {
+                                println!("Error while parsing volume {:?}",e);
+                                None
+                            }
+                        };
+                        
+
+                        if date.is_none() || close.is_none() || high.is_none() || low.is_none() || open.is_none() || volume.is_none(){
+                            println!("Header or Some of the values are None");
+                            continue;
+                        }
+
+                        let raw_stock = RawStock::new(
+                            "ADANIGREEN".to_owned(),
+                            date.unwrap(),
+                            close.unwrap(),
+                            high.unwrap(),
+                            low.unwrap(),
+                            open.unwrap(),
+                            volume.unwrap(),
+                            server_url_time_frame.time_frame.clone(),
+                        );
+
+                    
+                            // CurrentMarketState::calculate_market_state(
+                            //     stock,
+                            //     TimeFrame::FiveMinutes,
+                            //     &current_market_state_collection,
+                            // )
+                            // .await;
+                            println!("Received on {} tick: {:?}",server_url_time_frame.time_frame, text);
+
+                            hammer_ledger
+                                .calculate_and_add_ledger(&raw_stock, hammer_candle_collection.clone())
+                                .await; //TODO:: add to database toox
+                    
+                            // if hammer_ledger.fetch_hammer_pattern_ledger().len() > 0 {
+                            //     break;
+                            // }
                     }
                 }
                 Err(e) => {
@@ -94,7 +201,9 @@ async fn main() {
     // connect_websocket_oneminute().await;    
     // connect_websocket_oneminute().await;
     // return;
+    futures::future::join_all(tasks).await;
 
+    return;
     let redis_client = RedisClient::get_instance();
 
     let mut trade_keeper = trade_signal_keeper::TradeSignalsKeeper::new();
@@ -142,6 +251,12 @@ async fn main() {
 
     //START -> add the current_pnl_state into the database
     let current_pnl_state_collection_name = "current_pnl_states";
+
+    //TODO: Only update current market state at 1 min data tick and other time frame can copy the stats from it.
+    // 1. current_day_open high close low -> can be picked from 1 min only
+    // 2. previous_day_open high close low -> can be picked from 1 min only
+    // Others stats will be calculated seperately for each timeframe
+
     let current_pnl_state_collection = client
         .database(database_name)
         .collection::<CurrentPnLState>(current_pnl_state_collection_name);
@@ -165,7 +280,8 @@ async fn main() {
         403.3,
         401.6,
         403.3,
-        100000.0,
+        100000,
+        TimeFrame::FiveMinutes
     );
 
     current_market_state::CurrentMarketState::calculate_market_state(
@@ -176,9 +292,7 @@ async fn main() {
     .await;
 
     //END -> add the current_market_state into the database
-    futures::future::join_all(tasks).await;
-
-    return;
+    
 
     // for db_name in client.list_database_names(None, None).await? {
     //     println!("{}", db_name);
