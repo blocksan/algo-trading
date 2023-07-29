@@ -5,9 +5,13 @@ use chrono::prelude::*;
     const FILE_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%z";
     
 #[allow(dead_code, unused_variables)]
-pub fn parse_date_in_stock_format(date: &str) -> String {
-    let date_time = DateTime::parse_from_str(date, FILE_STOCK_DATETIME_FORMAT).unwrap();
-    date_time.format(DESIRED_STOCK_DATETIME_FORMAT).to_string()
+pub fn parse_date_in_stock_format(date: &str) -> Result<String, String> {
+    let date_time = DateTime::parse_from_str(date, FILE_STOCK_DATETIME_FORMAT);
+    match date_time {
+        Ok(_) => Ok(date.to_string()),
+        Err(_) => Err(format!("Error parsing date: {}", date)),
+    }
+    // Ok(date_time.format(DESIRED_STOCK_DATETIME_FORMAT).to_string())
 }
 
 #[allow(dead_code, unused_variables)]

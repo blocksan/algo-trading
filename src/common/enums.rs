@@ -67,3 +67,9 @@ impl fmt::Display for TimeFrame {
         // fmt::Debug::fmt(self, f)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct ServerUrlTimeFrame {
+    pub server_url: String,
+    pub time_frame: TimeFrame,
+}

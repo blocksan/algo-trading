@@ -1,6 +1,6 @@
 #[path = "../common/mod.rs"] mod common;
 use common::read_csv;
-use crate::common::raw_stock::RawStock;
+use crate::common::{raw_stock::RawStock, enums::TimeFrame};
 
     // let temp_stock = Stock5Min {
     //     date: "2021-01-01".to_string(),
@@ -37,7 +37,8 @@ pub fn read_5_min_data(file_path: &str) -> Result<Vec<RawStock>, Box<dyn std::er
                 stock_array[1],
                 stock_array[2],
                 stock_array[3],
-                stock_array[4],
+                stock_array[4] as i32,
+                TimeFrame::FiveMinutes
             );
             stock_5_min_keeper.push(stock);
             stock_array = Vec::new();
@@ -70,7 +71,8 @@ pub fn read_1_min_data(file_path: &str) -> Result<Vec<RawStock>, Box<dyn std::er
             stock_array[1],
             stock_array[2],
             stock_array[3],
-            stock_array[4],
+            stock_array[4] as i32,
+            TimeFrame::OneMinute
         );
         stock_1_min_keeper.push(stock);
         stock_array = Vec::new();
@@ -103,7 +105,8 @@ pub fn read_15_min_data(file_path: &str) -> Result<Vec<RawStock>, Box<dyn std::e
             stock_array[1],
             stock_array[2],
             stock_array[3],
-            stock_array[4],
+            stock_array[4] as i32,
+            TimeFrame::FifteenMinutes,
         );
         stock_15_min_keeper.push(stock);
         stock_array = Vec::new();

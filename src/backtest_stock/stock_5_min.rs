@@ -5,14 +5,14 @@ pub struct Stock5Min {
     pub high: f32,
     pub low: f32,
     pub close: f32,
-    pub volume: f32,
+    pub volume: i32,
     pub is_green_candle: bool,
     pub is_hammer: bool,
     pub is_shooting_star: bool,
     pub body_size_ratio: f32,
 }
 impl Stock5Min {
-    pub fn new(date: String, open: f32, high: f32, low: f32, close: f32, volume: f32, is_green_candle: bool, is_hammer: bool, is_shooting_star: bool, body_size_ratio: f32) -> Stock5Min {
+    pub fn new(date: String, open: f32, high: f32, low: f32, close: f32, volume: i32, is_green_candle: bool, is_hammer: bool, is_shooting_star: bool, body_size_ratio: f32) -> Stock5Min {
         Stock5Min {
             date,
             open,

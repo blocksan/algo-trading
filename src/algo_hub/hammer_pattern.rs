@@ -1,6 +1,6 @@
 
 #[path = "../common/mod.rs"] mod common;
-use crate::common::enums::{AlgoTypes, TradeType};
+use crate::common::enums::{AlgoTypes, TradeType, TimeFrame};
 use crate::common::number_parser::return_2_precision_for_float;
 use crate::common::raw_stock::RawStock;
 use crate::common::date_parser;
@@ -8,7 +8,7 @@ use crate::order_manager::trade_signal_keeper::TradeSignal;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HammerCandle {
     pub symbol: String,
     pub date: String,
@@ -16,7 +16,8 @@ pub struct HammerCandle {
     pub high: f32,
     pub low: f32,
     pub close: f32,
-    pub volume: f32,
+    pub volume: i32,
+    pub market_time_frame: TimeFrame,
     pub is_green_candle: bool,
     pub is_hammer: bool,
     pub body_size_ratio: f32,
@@ -30,7 +31,8 @@ impl HammerCandle {
         high: f32,
         low: f32,
         close: f32,
-        volume: f32,
+        volume: i32,
+        market_time_frame: TimeFrame,
         is_green_candle: bool,
         is_hammer: bool,
         body_size_ratio: f32,
@@ -44,6 +46,7 @@ impl HammerCandle {
             low,
             close,
             volume,
+            market_time_frame,
             is_green_candle,
             is_hammer,
             body_size_ratio,
@@ -102,6 +105,7 @@ impl HammerPatternUtil {
                 stock.low,
                 stock.close,
                 stock.volume,
+                stock.market_time_frame.clone(),
                 is_green_candle,
                 is_hammer_candle,
                 calculated_body_size_ratio,
@@ -110,7 +114,7 @@ impl HammerPatternUtil {
 
             match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
                 Ok(_) => {
-                    println!("Hammer candle inserted into the database");
+                    // println!("Hammer candle inserted into the database");
                 },
                 Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
             }
@@ -215,7 +219,7 @@ impl HammerPatternUtil {
             let trade_sl = return_2_precision_for_float(entry_price*0.95); //5% SL
             let trade_target = return_2_precision_for_float(entry_price*1.10); //10% Target
             // self.hammer_pattern_ledger.pop();
-            match HammerPatternUtil::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target) {
+            match HammerPatternUtil::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target) {
                 Some(trade_signal) => {
                     Some(trade_signal)
                 },
@@ -228,7 +232,7 @@ impl HammerPatternUtil {
 
     }
 
-    fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:f32, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32 ) -> Option<TradeSignal> {
+    fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32 ) -> Option<TradeSignal> {
         const QTY:i32 = 10;
         let trade_signal = TradeSignal::new(
             RawStock::new(
@@ -239,6 +243,7 @@ impl HammerPatternUtil {
                 low,
                 open,
                 volume,
+                market_time_frame,
             ),
             trade_position_type,
             algo_type,
