@@ -1,5 +1,5 @@
 // redis_client.rs
-use std::sync::{Mutex, Once};
+use std::{sync::{Mutex, Once}, fmt::{Debug, self}};
 
 use redis::{Client, Commands, Connection, RedisResult};
 
@@ -9,6 +9,13 @@ static INIT: Once = Once::new();
 pub struct RedisClient {
     connection: Connection,
 }
+// impl Debug for RedisClient {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("RedisClient")
+//             .field("connection", &self.connection)
+//             .finish()
+//     }
+// }
 
 impl RedisClient {
     fn new() -> RedisResult<Self> {
