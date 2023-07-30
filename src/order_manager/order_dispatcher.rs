@@ -83,6 +83,8 @@ impl fmt::Display for Order {
         // fmt::Debug::fmt(self, f)
     }
 }
+
+#[derive(Debug, Clone)]
 pub struct OrderManager {
     orders: Vec<Order>,
 }
@@ -199,7 +201,7 @@ impl OrderManager {
                 println!("Data deleted in Redis for key => {}", key);
             },
             Err(e) => {
-                println!("No order found for {} with Error {}", key, e);
+                println!("Not able to delete {:?} with Error {:?}", key, e);
             }
         }
 

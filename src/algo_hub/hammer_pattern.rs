@@ -89,7 +89,7 @@ impl HammerPatternUtil {
         self.hammer_pattern_ledger.clone()
     }
 
-    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, hammer_candle_collection: Collection<HammerCandle>) -> () {
+    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, hammer_candle_collection: Collection<HammerCandle>) -> Option<TradeSignal> {
         if self.hammer_pattern_ledger.len() > 0 {
             ()
         }
@@ -120,7 +120,9 @@ impl HammerPatternUtil {
             }
 
             self.add_into_hammer_pattern_ledger(hammer_candle);
-            ()
+            self.check_for_trade_opportunity()
+        }else{
+            None
         }
         
     }
