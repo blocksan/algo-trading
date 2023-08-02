@@ -36,13 +36,13 @@ impl RedisClient {
         }
     }
 
-    pub fn set_data(&mut self, key: &str, value: i32) -> RedisResult<()> {
+    pub fn set_data(&mut self, key: &str, value: &str) -> RedisResult<()> {
         self.connection.set(key, value)?;
         Ok(())
     }
 
-    pub fn get_data(&mut self, key: &str) -> RedisResult<i32> {
-        let data: i32 = self.connection.get(key)?;
+    pub fn get_data(&mut self, key: &str) -> RedisResult<String> {
+        let data = self.connection.get(key)?;
         Ok(data)
     }
 

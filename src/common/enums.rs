@@ -2,7 +2,7 @@ use mongodb::{Database, Collection};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self}, common::redis_client::RedisClient};
+use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self}};
 
 
 #[allow(dead_code)]

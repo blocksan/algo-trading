@@ -35,4 +35,10 @@ pub fn date_time_difference_in_seconds(date1: &str, date2: &str) -> i64 {
     difference.num_seconds()
 }
 
+#[allow(dead_code, unused_variables)]
+pub fn return_only_date_from_datetime(date: &str) -> String {
+    let date_time = DateTime::parse_from_str(date, FILE_STOCK_DATETIME_FORMAT).unwrap();
+    date_time.format("%Y_%m_%d").to_string()
+}
+
 // }
