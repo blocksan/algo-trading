@@ -1,7 +1,7 @@
-use std::sync::{Mutex};
+use std::sync::Mutex;
 use mongodb::{Collection, Database};
 
-use crate::{common::{raw_stock::RawStock, enums::AlgoTypes, utils, redis_client::{self, RedisClient}}, 
+use crate::{common::{raw_stock::RawStock, enums::AlgoTypes, utils, redis_client::RedisClient}, 
 order_manager::{self, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}}};
 
 use super::hammer_pattern::{HammerCandle, HammerPatternUtil};
@@ -45,7 +45,7 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
                                     order.trade_algo_type.to_string().as_str(),
                                 );
             
-                                match redis_client.lock().unwrap().set_data(key.as_str(), 1) {
+                                match redis_client.lock().unwrap().set_data(key.as_str(), "1") {
                                     Ok(_) => {
                                         println!("Data set in Redis for key => {}", key);
                                     }

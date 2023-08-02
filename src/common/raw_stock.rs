@@ -37,3 +37,23 @@ impl RawStock{
         open < close
     }
 }
+
+pub struct RawStockLedger {
+    pub raw_stocks: Vec<RawStock>
+}
+
+impl RawStockLedger {
+    pub fn new() -> RawStockLedger {
+        RawStockLedger {
+            raw_stocks: Vec::new(),
+        }
+    }
+
+    pub fn get_raw_stocks(&self) -> &Vec<RawStock> {
+        &self.raw_stocks
+    }
+
+    pub fn add_raw_stock(&mut self, raw_stock: RawStock) {
+        self.raw_stocks.push(raw_stock);
+    }
+}

@@ -149,7 +149,8 @@ impl OrderManager {
 
         match redis_client.lock().unwrap().get_data(key.as_str()){
             Ok(data) => {
-                if data > 0 {
+                let parsed_data: i32 = data.parse().unwrap();
+                if parsed_data > 0 {
                     order_exists = true;
                 }
             },
@@ -209,12 +210,11 @@ impl OrderManager {
     }
 
     fn calculate_profit(order: Order, exit_price: f32) -> (f32, bool) {
-        let mut profit = 0.0;
-        if order.trade_position_type == TradeType::Long {
-            profit = (exit_price - order.entry_price)*order.qty as f32;
+        let profit = if order.trade_position_type == TradeType::Long {
+            (exit_price - order.entry_price)*order.qty as f32
         }else{
-            profit = (order.entry_price - exit_price)*order.qty as f32;
-        }
+            (order.entry_price - exit_price)*order.qty as f32
+        };
         (profit, profit > 0.0)
     }
 }
