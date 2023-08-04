@@ -24,7 +24,7 @@ use crate::{
         date_parser,
         enums::{AlgoTypes, RootSystemConfig, ThreadJobType, ThreadWorkerConfig},
         raw_stock::{RawStock, RawStockLedger},
-    },
+    }, trade_watcher::monitor_trade,
 };
 use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 
@@ -148,7 +148,7 @@ async fn main() {
         }, //fiveminute socket
         ThreadWorkerConfig {
             thread_job_type: ThreadJobType::TradeWatcherCron,
-            time_frame: TimeFrame::FifteenMinutes,
+            time_frame: TimeFrame::Infinity,
             root_system_config: RootSystemConfig {
                 database_instance: db.clone(),
                 hammer_candle_collection: hammer_candle_collection.clone(),
@@ -198,7 +198,7 @@ async fn main() {
                 server_url,
                 tradeable_algo_types,
                 trade_keeper,
-                order_manager,
+                mut order_manager,
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();
@@ -296,31 +296,37 @@ async fn main() {
 
                             raw_stock_ledger.add_raw_stock(raw_stock.clone());
 
-                            if thread_worker_config.time_frame == TimeFrame::FiveMinutes {
-                                CurrentMarketState::calculate_market_state(
+                            match thread_worker_config.time_frame {
+                                TimeFrame::FiveMinutes => {
+                                    CurrentMarketState::calculate_market_state(
+                                        &raw_stock,
+                                        thread_worker_config.time_frame.clone(),
+                                        &current_market_state_collection,
+                                        redis_client.clone(),
+                                        &raw_stock_ledger,
+                                        database_instance.clone(),
+                                    )
+                                    .await;
+    
+                                algo_dispatcher::ingest_raw_stock_data(
                                     &raw_stock,
-                                    thread_worker_config.time_frame.clone(),
-                                    &current_market_state_collection,
+                                    tradeable_algo_types.clone(),
+                                    hammer_ledger.clone(),
+                                    hammer_candle_collection.clone(),
+                                    trade_keeper.clone(),
+                                    trade_signal_collection.clone(),
+                                    order_manager.clone(),
+                                    orders_collection.clone(),
                                     redis_client.clone(),
-                                    &raw_stock_ledger,
                                     database_instance.clone(),
                                 )
                                 .await;
+                                },
+                                TimeFrame::OneMinute =>{
+                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone());
+                                }
+                                _ => ()
                             }
-
-                            algo_dispatcher::ingest_raw_stock_data(
-                                &raw_stock,
-                                tradeable_algo_types.clone(),
-                                hammer_ledger.clone(),
-                                hammer_candle_collection.clone(),
-                                trade_keeper.clone(),
-                                trade_signal_collection.clone(),
-                                order_manager.clone(),
-                                orders_collection.clone(),
-                                redis_client.clone(),
-                                database_instance.clone(),
-                            )
-                            .await;
 
                             
                             // if hammer_ledger.fextch_hammer_pattern_ledger().len() > 0 {
