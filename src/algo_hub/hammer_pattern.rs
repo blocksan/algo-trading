@@ -7,7 +7,7 @@ use crate::common::date_parser;
 use crate::order_manager::trade_signal_keeper::TradeSignal;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
-
+const QTY:i32 = 10;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HammerCandle {
     pub symbol: String,
@@ -90,10 +90,8 @@ impl HammerPatternUtil {
     }
 
     pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, hammer_candle_collection: Collection<HammerCandle>) -> Option<TradeSignal> {
-        if self.hammer_pattern_ledger.len() > 0 {
-            ()
-        }
-        let (is_hammer_candle, calculated_body_size_ratio, is_green_candle) =
+        
+        let (is_hammer_candle, calculated_body_size, is_green_candle) =
         HammerPatternUtil::calculate_candle_metadata(stock.open, stock.high, stock.low, stock.close);
 
         if is_hammer_candle {
@@ -108,7 +106,7 @@ impl HammerPatternUtil {
                 stock.market_time_frame.clone(),
                 is_green_candle,
                 is_hammer_candle,
-                calculated_body_size_ratio,
+                calculated_body_size,
                 date_parser::new_current_date_time_in_desired_stock_datetime_format()
             );
 
@@ -118,7 +116,7 @@ impl HammerPatternUtil {
                 },
                 Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
             }
-
+            println!("Hammer candle found => {:?}", hammer_candle);
             self.add_into_hammer_pattern_ledger(hammer_candle);
             self.check_for_trade_opportunity()
         }else{
@@ -132,20 +130,20 @@ impl HammerPatternUtil {
         low: f32,
         close: f32,
     ) -> (bool, f32, bool) {
-        let calculated_body_size_ratio: f32 = RawStock::candle_body_size(open, close);
+        let calculated_body_size: f32 = RawStock::candle_body_size(open, close);
         let is_hammer_candle =
-        HammerPatternUtil::calculate_hammer_candle(calculated_body_size_ratio, open, high, low, close);
+        HammerPatternUtil::calculate_hammer_candle(calculated_body_size, open, high, low, close);
         let is_green_candle = RawStock::calculate_if_green_candle(open, close);
 
         (
             is_hammer_candle,
-            calculated_body_size_ratio,
+            calculated_body_size,
             is_green_candle,
         )
     }
 
     fn calculate_hammer_candle(
-        calculated_body_size_ratio: f32,
+        calculated_body_size: f32,
         open: f32,
         high: f32,
         low: f32,
@@ -162,15 +160,15 @@ impl HammerPatternUtil {
             high - close
         };
 
-        let lower_wick_to_body_ratio = lower_wick / calculated_body_size_ratio;
-        let upper_wick_to_body_ratio = upper_wick / calculated_body_size_ratio;
+        let lower_wick_to_body_ratio = lower_wick / calculated_body_size;
+        let upper_wick_to_body_ratio = upper_wick / calculated_body_size;
 
         let full_candle_height = high - low;
-        let body_to_full_candle_ratio = calculated_body_size_ratio / full_candle_height;
+        let body_to_full_candle_ratio = calculated_body_size / full_candle_height;
 
         // print!("lower_wick_to_body_ratio => {:?} ", lower_wick_to_body_ratio);
         // print!("upper_wick_to_body_ratio => {:?} ", upper_wick_to_body_ratio);
-        // println!("calculated_body_size_ratio => {:?}", calculated_body_size_ratio);
+        // println!("calculated_body_size => {:?}", calculated_body_size);
         // println!("lower_wick => {:?}", lower_wick);
         // println!("upper_wick => {:?}", upper_wick);
         // println!("full_candle_height => {:?}", full_candle_height);
@@ -187,34 +185,20 @@ impl HammerPatternUtil {
     
     pub fn check_for_trade_opportunity(&mut self) -> Option<TradeSignal> {
         let previous_hammer_candle_exists = self.hammer_pattern_ledger.last();
-
         if previous_hammer_candle_exists.is_none()  {
             return None;
         }   
 
         let previous_hammer_candle = previous_hammer_candle_exists.unwrap();
 
-        let trade_position_type = match previous_hammer_candle.is_green_candle {
-            true => TradeType::Long,
-            false => TradeType::Long
-        }; //hammer candle always going to give long trades
+        if date_parser::new_current_date_time_in_desired_stock_datetime_format() < previous_hammer_candle.date  {
+            return None;
+        }
 
-        let entry_price = match previous_hammer_candle.is_green_candle {
-            true => {
-                if date_parser::new_current_date_time_in_desired_stock_datetime_format() > previous_hammer_candle.date  {
-                return_2_precision_for_float(previous_hammer_candle.close*1.005)
-              } else {
-                -1.0
-              }
-            },
-            false => {
-             if date_parser::new_current_date_time_in_desired_stock_datetime_format() > previous_hammer_candle.date  {
-                return_2_precision_for_float(previous_hammer_candle.open*1.005)
-              } else {
-                -1.0
-              }
-            }
-        };
+        let (trade_position_type, entry_price) = match previous_hammer_candle.is_green_candle {
+            true => (TradeType::Long, return_2_precision_for_float(previous_hammer_candle.close*0.95)), //95% of the close price can be a good entry point
+            false => (TradeType::Long, return_2_precision_for_float(previous_hammer_candle.open*0.95)) //95% of the open price can be a good entry point
+        }; //hammer candle always going to give long trades
 
         // let candle = previous_hammer_candle.clone();
         if entry_price > 0.0 {
@@ -235,7 +219,6 @@ impl HammerPatternUtil {
     }
 
     fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32 ) -> Option<TradeSignal> {
-        const QTY:i32 = 10;
         let trade_signal = TradeSignal::new(
             RawStock::new(
                 symbol,

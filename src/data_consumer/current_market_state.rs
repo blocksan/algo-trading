@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient};
+use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
 use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, Document}};
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -186,14 +186,15 @@ impl CurrentMarketState {
     pub async fn calculate_market_state(stock: &RawStock, time_frame: TimeFrame, current_market_state_collection: &Collection<CurrentMarketState>, redis_client: &Mutex<RedisClient>, raw_stock_ledger: &RawStockLedger, database_instance: Database) {
 
         let trade_date_only = date_parser::return_only_date_from_datetime(stock.date.as_str());
-        let current_market_state_cache_key = format!("{}_{}_{}_{}","CMS" , trade_date_only, stock.symbol, stock.market_time_frame);
+        let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
         let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
         let options = FindOneOptions::builder().build();
         let previous_market_state = match current_market_state_collection.find_one(filter, options).await {
-            Ok(data) => {
-                println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
-                data
+            Ok(Some(data)) => {
+                // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
+                Some(data)
             },
+            Ok(None) => None,
             Err(e) => {
                 println!("Error while fetching the data from MongoDB => {:?}", e);
                 None
@@ -232,6 +233,9 @@ impl CurrentMarketState {
                 None
                 // Self::calculate_market_state_for_oneyear(stock)
             },
+            _ => {
+                None
+            }
         };
 
         match current_market_state {
@@ -241,7 +245,7 @@ impl CurrentMarketState {
                 let document = doc!{"$set":current_market_state.to_document()};
                 match current_market_state_collection.update_one(filter,  document, options).await {
                     Ok(_) => {
-                        println!("Successfully inserted a current_market_state into the collection");
+                        // println!("Successfully inserted a current_market_state into the collection");
                     },
                     Err(e) => {
                         println!("Error while inserting a current_market_state into the collection: {:?} error {:?}", current_market_state,e);
@@ -347,13 +351,13 @@ impl CurrentMarketState {
                 };
 
                 
-                println!("last_consecutive_green_candle_count => {}", last_consecutive_green_candle_count);
-                println!("last_consecutive_red_candle_count => {}", last_consecutive_red_candle_count);
-                println!("current_candle_market_trend => {:?}", current_candle_market_trend);
-                println!("current_SMA => {}", current_sma);
-                println!("current_candle_close => {}", stock.close.clone());
-                println!("update_required => {}", update_required);
-                println!("previous_market_state => {:?}", previous_market_state);
+                // println!("last_consecutive_green_candle_count => {}", last_consecutive_green_candle_count);
+                // println!("last_consecutive_red_candle_count => {}", last_consecutive_red_candle_count);
+                // println!("current_candle_market_trend => {:?}", current_candle_market_trend);
+                // println!("current_SMA => {}", current_sma);
+                // println!("current_candle_close => {}", stock.close.clone());
+                // println!("update_required => {}", update_required);
+                // println!("previous_market_state => {:?}", previous_market_state);
 
                 if update_required {
                     let current_market_state = CurrentMarketState::new(

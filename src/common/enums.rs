@@ -61,6 +61,7 @@ pub enum TimeFrame{
     OneWeek,
     OneMonth,
     OneYear,
+    Infinity,
 }
 
 impl fmt::Display for TimeFrame {

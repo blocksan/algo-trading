@@ -1,9 +1,13 @@
-use mongodb::Collection;
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use crate::common::{enums::{AlgoTypes,TradeType}, redis_client::RedisClient, utils::{self, symbol_algo_type_formatter}, date_parser::new_current_date_time_in_desired_stock_datetime_format};
 use super::trade_signal_keeper::TradeSignal;
-
+use crate::common::{
+    date_parser::new_current_date_time_in_desired_stock_datetime_format,
+    enums::{AlgoTypes, TradeType},
+    redis_client::RedisClient,
+    utils::{self, order_cache_key_formatter},
+};
+use mongodb::{bson::doc, options::FindOneOptions, Collection};
+use serde::{Deserialize, Serialize};
+use std::{fmt, sync::Mutex};
 
 // #[derive(Debug, Clone, PartialEq)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,7 +27,6 @@ pub struct Order {
     pub order_id: String,
     pub closing_profit: f32,
     pub is_profitable_trade: bool,
-    
 }
 
 impl Order {
@@ -59,19 +62,19 @@ impl Order {
             trade_closed_at,
             order_id,
             closing_profit,
-            is_profitable_trade
+            is_profitable_trade,
         }
     }
 
-    pub fn exit_trade(
-        &mut self,
-        exit_price: f32,
-        trade_closed_at: String,
-    ) -> (){
+    pub fn exit_trade(&mut self, exit_price: f32, trade_closed_at: String) -> () {
         self.exit_price = exit_price;
         self.trade_closed_at = trade_closed_at;
         self.is_trade_open = false;
-        self.closing_profit = if self.trade_position_type == TradeType::Long {(self.exit_price - self.entry_price)*self.qty as f32} else {(self.entry_price - self.exit_price)*self.qty as f32};
+        self.closing_profit = if self.trade_position_type == TradeType::Long {
+            (self.exit_price - self.entry_price) * self.qty as f32
+        } else {
+            (self.entry_price - self.exit_price) * self.qty as f32
+        };
         self.is_profitable_trade = self.closing_profit > 0.0;
     }
 }
@@ -91,18 +94,34 @@ pub struct OrderManager {
 
 impl OrderManager {
     pub fn new() -> OrderManager {
-        OrderManager {
-            orders: Vec::new(),
-        }
+        OrderManager { orders: Vec::new() }
     }
 
-    pub async fn add_and_dispatch_order(&mut self, trade_signal: TradeSignal, order_collection: Collection<Order>) -> Option<Order>{
-        let order_exists = OrderManager::check_if_order_exists(trade_signal.raw_stock.symbol.clone(), trade_signal.trade_algo_type.clone());
-        
+    pub async fn check_and_dispatch_order(
+        &mut self,
+        trade_signal: TradeSignal,
+        redis_client: &Mutex<RedisClient>,
+        order_collection: Collection<Order>,
+    ) -> () {
+        let order_cache_key = utils::order_cache_key_formatter(
+            &trade_signal.raw_stock.symbol,
+            &trade_signal.trade_algo_type,
+        );
+        let order_exists = OrderManager::check_if_order_exists(
+            order_cache_key.as_str(),
+            redis_client,
+            &order_collection,
+        )
+        .await;
+
         if order_exists {
-            println!("Order already exists for {} with algo type {}", trade_signal.raw_stock.symbol, trade_signal.trade_algo_type.to_string());
-            None
-        }else{
+            println!(
+                "Order already exists for {} with algo type {}",
+                trade_signal.raw_stock.symbol,
+                trade_signal.trade_algo_type.to_string()
+            );
+            ()
+        } else {
             let order = Order::new(
                 trade_signal.raw_stock.symbol.clone(),
                 trade_signal.trade_position_type,
@@ -116,7 +135,10 @@ impl OrderManager {
                 trade_signal.total_price,
                 trade_signal.trade_signal_requested_at,
                 "".to_string(),
-                symbol_algo_type_formatter(trade_signal.raw_stock.symbol.as_str(), trade_signal.trade_algo_type.to_string().as_str()),
+                order_cache_key_formatter(
+                    trade_signal.raw_stock.symbol.as_str(),
+                    &trade_signal.trade_algo_type,
+                ),
                 0.0,
                 false,
             );
@@ -124,16 +146,28 @@ impl OrderManager {
             println!("Order added to the order manager");
 
             //TODO:: add logic to call the Zerodha API to place the order
-            match order_collection.insert_one(order.clone(), None).await{
+            match order_collection.insert_one(order.clone(), None).await {
                 Ok(_) => {
                     println!("Order added to the database");
-                },
+                    match redis_client
+                        .lock()
+                        .unwrap()
+                        .set_data(order_cache_key.as_str(), "1")
+                    {
+                        Ok(_) => {
+                            println!("Order added in Redis for key => {}", order_cache_key);
+                        }
+                        Err(e) => {
+                            println!("Error while adding order in Redis => {:?}", e);
+                        }
+                    }
+                }
                 Err(e) => {
                     println!("Error while adding order to the database {}", e);
                 }
             }
             self.orders.push(order.clone());
-            Some(order)
+            ()
         }
     }
 
@@ -141,28 +175,52 @@ impl OrderManager {
         &self.orders
     }
 
-    fn check_if_order_exists(symbol: String, trade_algo_type: AlgoTypes) -> bool {
-        let mut order_exists = false;
-        let redis_client = RedisClient::get_instance();
-
-        let key = utils::symbol_algo_type_formatter(symbol.as_str(), trade_algo_type.to_string().as_str());
-
-        match redis_client.lock().unwrap().get_data(key.as_str()){
+    async fn check_if_order_exists(
+        cache_key: &str,
+        redis_client: &Mutex<RedisClient>,
+        order_collection: &Collection<Order>,
+    ) -> bool {
+        let mut order_exists = match redis_client.lock().unwrap().get_data(cache_key) {
             Ok(data) => {
                 let parsed_data: i32 = data.parse().unwrap();
                 if parsed_data > 0 {
-                    order_exists = true;
+                    true
+                } else {
+                    false
                 }
-            },
-            Err(e) => {
-                println!("No order found for {} with Error {}", key, e);
-                order_exists = false;
             }
+            Err(e) => {
+                println!(
+                    "No order found in REDIS for {} with Error {:?}",
+                    cache_key, e
+                );
+
+                false
+            }
+        };
+
+        if order_exists {
+            println!("Order exists in Redis for key => {}", cache_key);
+            return order_exists;
         }
+
+        let filter = doc! {"cache_key": cache_key.clone() };
+        let options: FindOneOptions = FindOneOptions::builder().build();
+        order_exists = match order_collection.find_one(filter, options).await {
+            Ok(Some(order)) => {
+                println!("Existing order found for {} => {:?}", cache_key, order);
+                true
+            }
+            Ok(None) => false,
+            Err(e) => {
+                println!("Error while fetching the data from MongoDB => {:?}", e);
+                false
+            }
+        };
         order_exists
     }
 
-    pub fn exit_and_update_order(&mut self, order: Order, exit_price: f32) -> (){
+    pub fn exit_and_update_order(&mut self, order: Order, exit_price: f32) -> () {
         let mut order_index = 0;
         for (index, order_in_orders) in self.orders.iter().enumerate() {
             if order_in_orders.order_id == order.order_id {
@@ -171,7 +229,8 @@ impl OrderManager {
             }
         }
 
-        let (closing_profit, is_profitable_trade) = OrderManager::calculate_profit(order.clone(), exit_price);
+        let (closing_profit, is_profitable_trade) =
+            OrderManager::calculate_profit(order.clone(), exit_price);
 
         let new_order = Order::new(
             order.symbol.clone(),
@@ -191,29 +250,28 @@ impl OrderManager {
             is_profitable_trade,
         );
 
-        let key = utils::symbol_algo_type_formatter(new_order.symbol.as_str(), new_order.trade_algo_type.to_string().as_str());
-        
+        let key =
+            utils::order_cache_key_formatter(new_order.symbol.as_str(), &new_order.trade_algo_type);
+
         self.orders[order_index] = new_order;
 
         let redis_client = RedisClient::get_instance();
 
-        match redis_client.lock().unwrap().delete_data(key.as_str()){
+        match redis_client.lock().unwrap().delete_data(key.as_str()) {
             Ok(_) => {
                 println!("Data deleted in Redis for key => {}", key);
-            },
+            }
             Err(e) => {
                 println!("Not able to delete {:?} with Error {:?}", key, e);
             }
         }
-
-
     }
 
     fn calculate_profit(order: Order, exit_price: f32) -> (f32, bool) {
         let profit = if order.trade_position_type == TradeType::Long {
-            (exit_price - order.entry_price)*order.qty as f32
-        }else{
-            (order.entry_price - exit_price)*order.qty as f32
+            (exit_price - order.entry_price) * order.qty as f32
+        } else {
+            (order.entry_price - exit_price) * order.qty as f32
         };
         (profit, profit > 0.0)
     }

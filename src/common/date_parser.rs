@@ -1,9 +1,10 @@
 use chrono::prelude::*;
 
 // pub fn date_util() {
-    const DESIRED_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%Z";
-    const FILE_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%z";
-    
+const DESIRED_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%Z";
+const FILE_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%z";
+const _DESIRED_STOCK_ORDER_CACHE_DATETIME_FORMAT: &str = "%Y_%m_%d_%H:%M:%S";
+
 #[allow(dead_code, unused_variables)]
 pub fn parse_date_in_stock_format(date: &str) -> Result<String, String> {
     let date_time = DateTime::parse_from_str(date, FILE_STOCK_DATETIME_FORMAT);
@@ -13,7 +14,6 @@ pub fn parse_date_in_stock_format(date: &str) -> Result<String, String> {
     }
     // Ok(date_time.format(DESIRED_STOCK_DATETIME_FORMAT).to_string())
 }
-
 #[allow(dead_code, unused_variables)]
 pub fn new_current_date_time_in_desired_stock_datetime_format() -> String {
     let now_time: DateTime<Local> = Local::now();
