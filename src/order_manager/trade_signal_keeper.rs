@@ -1,4 +1,4 @@
-use mongodb::Collection;
+use mongodb::{Collection, bson::oid::ObjectId};
 
 use crate::common::{raw_stock::RawStock, enums::{AlgoTypes, TradeType}};
 use serde::{Deserialize, Serialize};
@@ -14,10 +14,13 @@ pub struct TradeSignal{
     pub trade_target: f32,
     pub qty: i32,
     pub total_price: f32,
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
+    pub algo_id: ObjectId,
 }
 
 impl TradeSignal{
-    pub fn new(raw_stock: RawStock,trade_position_type: TradeType, trade_algo_type: AlgoTypes, trade_signal_requested_at: String,  entry_price: f32, trade_sl: f32, trade_target: f32, qty: i32, total_price: f32 ) -> TradeSignal {
+    pub fn new(raw_stock: RawStock,trade_position_type: TradeType, trade_algo_type: AlgoTypes, trade_signal_requested_at: String,  entry_price: f32, trade_sl: f32, trade_target: f32, qty: i32, total_price: f32, id: ObjectId, algo_id: ObjectId ) -> TradeSignal {
         TradeSignal {
             raw_stock,
             trade_position_type,
@@ -28,6 +31,8 @@ impl TradeSignal{
             trade_target,
             qty,
             total_price,
+            id,
+            algo_id
         }
     }
 

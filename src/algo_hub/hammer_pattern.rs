@@ -5,6 +5,7 @@ use crate::common::number_parser::return_2_precision_for_float;
 use crate::common::raw_stock::RawStock;
 use crate::common::date_parser;
 use crate::order_manager::trade_signal_keeper::TradeSignal;
+use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
 const QTY:i32 = 10;
@@ -22,6 +23,9 @@ pub struct HammerCandle {
     pub is_hammer: bool,
     pub body_size_ratio: f32,
     pub identified_at: String,
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
+    // pub _id : String, //MongoDB ID => Initialized with empty string, will be updated when inserted into DB
 }
 impl HammerCandle {
     pub fn new(
@@ -37,6 +41,7 @@ impl HammerCandle {
         is_hammer: bool,
         body_size_ratio: f32,
         identified_at: String,
+        id: ObjectId,
     ) -> HammerCandle {
         HammerCandle {
             symbol,
@@ -51,6 +56,7 @@ impl HammerCandle {
             is_hammer,
             body_size_ratio,
             identified_at,
+            id
         }
     }
 
@@ -107,16 +113,16 @@ impl HammerPatternUtil {
                 is_green_candle,
                 is_hammer_candle,
                 calculated_body_size,
-                date_parser::new_current_date_time_in_desired_stock_datetime_format()
+                date_parser::new_current_date_time_in_desired_stock_datetime_format(),
+                ObjectId::new()
             );
 
             match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
-                Ok(_) => {
-                    // println!("Hammer candle inserted into the database");
+                Ok(result) => {
+                    println!("Hammer candle inserted into the database {:?}", result);
                 },
                 Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
             }
-            println!("Hammer candle found => {:?}", hammer_candle);
             self.add_into_hammer_pattern_ledger(hammer_candle);
             self.check_for_trade_opportunity()
         }else{
@@ -205,7 +211,7 @@ impl HammerPatternUtil {
             let trade_sl = return_2_precision_for_float(entry_price*0.95); //5% SL
             let trade_target = return_2_precision_for_float(entry_price*1.10); //10% Target
             // self.hammer_pattern_ledger.pop();
-            match HammerPatternUtil::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target) {
+            match HammerPatternUtil::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target, previous_hammer_candle.id) {
                 Some(trade_signal) => {
                     Some(trade_signal)
                 },
@@ -218,7 +224,7 @@ impl HammerPatternUtil {
 
     }
 
-    fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32 ) -> Option<TradeSignal> {
+    fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32, algo_id: ObjectId ) -> Option<TradeSignal> {
         let trade_signal = TradeSignal::new(
             RawStock::new(
                 symbol,
@@ -238,6 +244,9 @@ impl HammerPatternUtil {
             trade_target,
             QTY,
             entry_price*QTY as f32,
+            ObjectId::new(),
+            algo_id
+
         );
         Some(trade_signal)
     }

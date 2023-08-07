@@ -1,6 +1,6 @@
 use mongodb::{Database, Collection};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, sync::{Arc, Mutex}};
 
 use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self}};
 
@@ -104,4 +104,5 @@ pub struct RootSystemConfig {
     pub tradeable_algo_types: Vec<AlgoTypes>,
     pub trade_keeper: TradeSignalsKeeper, 
     pub order_manager: order_manager::order_dispatcher::OrderManager,
+    pub shared_order_ledger: Arc<Mutex<Vec<Order>>>
 }

@@ -33,32 +33,32 @@ pub struct CurrentMarketState {
 
 }
 
-impl From<CurrentMarketState> for Document{
-    fn from(current_market_state: CurrentMarketState) -> Self {
-        doc! {
-            "market_time_frame": current_market_state.market_time_frame.to_string(),
-            "previous_candle_market_trend": current_market_state.previous_candle_market_trend.to_string(),
-            "current_candle_market_trend": current_market_state.current_candle_market_trend.to_string(),
-            "current_sma": current_market_state.current_sma,
-            "previous_candle_open": current_market_state.previous_candle_open,
-            "previous_candle_high": current_market_state.previous_candle_high,
-            "previous_candle_low": current_market_state.previous_candle_low,
-            "previous_candle_close": current_market_state.previous_candle_close,
-            "previous_candle_volume": current_market_state.previous_candle_volume,
-            "current_candle_open": current_market_state.current_candle_open,
-            "current_candle_high": current_market_state.current_candle_high,
-            "current_candle_low": current_market_state.current_candle_low,
-            "current_candle_close": current_market_state.current_candle_close,
-            "current_candle_volume": current_market_state.current_candle_volume,
-            "last_consecutive_green_candle_count": current_market_state.last_consecutive_green_candle_count,
-            "last_consecutive_red_candle_count": current_market_state.last_consecutive_red_candle_count,
-            "symbol": current_market_state.symbol,
-            "trade_date": current_market_state.trade_date,
-            "last_updated_at": current_market_state.last_updated_at,
-            "cache_key": current_market_state.cache_key,
-        }
-    }
-}
+// impl From<CurrentMarketState> for Document{
+//     fn from(current_market_state: CurrentMarketState) -> Self {
+//         doc! {
+//             "market_time_frame": current_market_state.market_time_frame.to_string(),
+//             "previous_candle_market_trend": current_market_state.previous_candle_market_trend.to_string(),
+//             "current_candle_market_trend": current_market_state.current_candle_market_trend.to_string(),
+//             "current_sma": current_market_state.current_sma,
+//             "previous_candle_open": current_market_state.previous_candle_open,
+//             "previous_candle_high": current_market_state.previous_candle_high,
+//             "previous_candle_low": current_market_state.previous_candle_low,
+//             "previous_candle_close": current_market_state.previous_candle_close,
+//             "previous_candle_volume": current_market_state.previous_candle_volume,
+//             "current_candle_open": current_market_state.current_candle_open,
+//             "current_candle_high": current_market_state.current_candle_high,
+//             "current_candle_low": current_market_state.current_candle_low,
+//             "current_candle_close": current_market_state.current_candle_close,
+//             "current_candle_volume": current_market_state.current_candle_volume,
+//             "last_consecutive_green_candle_count": current_market_state.last_consecutive_green_candle_count,
+//             "last_consecutive_red_candle_count": current_market_state.last_consecutive_red_candle_count,
+//             "symbol": current_market_state.symbol,
+//             "trade_date": current_market_state.trade_date,
+//             "last_updated_at": current_market_state.last_updated_at,
+//             "cache_key": current_market_state.cache_key,
+//         }
+//     }
+// }
 
 // impl UpdateModifications for CurrentMarketState{
 //     fn update(&self, doc: &mut Document)-> Result<()>{
@@ -248,7 +248,7 @@ impl CurrentMarketState {
                         // println!("Successfully inserted a current_market_state into the collection");
                     },
                     Err(e) => {
-                        println!("Error while inserting a current_market_state into the collection: {:?} error {:?}", current_market_state,e);
+                        println!("Error while updating a current_market_state into the collection: {:?} error {:?}", current_market_state,e);
                     }
                 }
             },
