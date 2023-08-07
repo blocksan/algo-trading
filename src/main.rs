@@ -13,7 +13,7 @@ use order_manager::{
     pnl_state::{self, CurrentPnLState, PnLConfiguration},
     trade_signal_keeper::{self, TradeSignal},
 };
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 extern crate mongodb;
 extern crate tokio;
 use mongodb::{options::ClientOptions, Client};
@@ -64,6 +64,8 @@ async fn main() {
     let order_manager = order_dispatcher::OrderManager::new();
     let redis_client = RedisClient::get_instance();
 
+    let shared_order_ledger: Arc<Mutex<Vec<Order>>> = Arc::new(Mutex::new(Vec::new()));
+
     //START -> add new User into the database
     // let user_collection_name = "users";
     // let user_collection = client
@@ -110,22 +112,23 @@ async fn main() {
     //END -> add the current_pnl_state into the database
 
     let thread_worker_configs = vec![
-        // ThreadWorkerConfig {
-        //     thread_job_type: ThreadJobType::DataConsumerViaSocket,
-        //     time_frame: TimeFrame::OneMinute,
-        //     root_system_config: RootSystemConfig {
-        //         database_instance: db.clone(),
-        //         hammer_candle_collection: hammer_candle_collection.clone(),
-        //         hammer_ledger: hammer_ledger.clone(),
-        //         current_market_state_collection: current_market_state_collection.clone(),
-        //         orders_collection: orders_collection.clone(),
-        //         trade_signal_collection: trade_signal_collection.clone(),
-        //         server_url: "ws://localhost:5554".to_string(),
-        //         tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
-        //         trade_keeper: trade_keeper.clone(),
-        //         order_manager: order_manager.clone(),
-        //     },
-        // }, //oneminute socket
+        ThreadWorkerConfig {
+            thread_job_type: ThreadJobType::DataConsumerViaSocket,
+            time_frame: TimeFrame::OneMinute,
+            root_system_config: RootSystemConfig {
+                database_instance: db.clone(),
+                hammer_candle_collection: hammer_candle_collection.clone(),
+                hammer_ledger: hammer_ledger.clone(),
+                current_market_state_collection: current_market_state_collection.clone(),
+                orders_collection: orders_collection.clone(),
+                trade_signal_collection: trade_signal_collection.clone(),
+                server_url: "ws://localhost:5554".to_string(),
+                tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
+                trade_keeper: trade_keeper.clone(),
+                order_manager: order_manager.clone(),
+                shared_order_ledger: shared_order_ledger.clone(),
+            },
+        }, //oneminute socket
         // ThreadWorkerConfig{
         //     server_url: "ws://localhost:5555".to_string(),
         //     time_frame: TimeFrame::ThreeMinutes
@@ -144,6 +147,7 @@ async fn main() {
                 tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
+                shared_order_ledger: shared_order_ledger.clone(),
             },
         }, //fiveminute socket
         ThreadWorkerConfig {
@@ -160,6 +164,7 @@ async fn main() {
                 tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
+                shared_order_ledger: shared_order_ledger.clone(),
             },
         }, // "ws://localhost:5556", //fiveminute socket
            // "ws://localhost:5557", //fifteenminute socket
@@ -199,6 +204,7 @@ async fn main() {
                 tradeable_algo_types,
                 trade_keeper,
                 mut order_manager,
+                shared_order_ledger,
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();
@@ -319,11 +325,14 @@ async fn main() {
                                     orders_collection.clone(),
                                     redis_client.clone(),
                                     database_instance.clone(),
+                                    shared_order_ledger.clone(),
                                 )
                                 .await;
                                 },
                                 TimeFrame::OneMinute =>{
-                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone());
+                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(), shared_order_ledger.clone()).await;
+                                    // let temp = shared_order_ledger.lock().unwrap().clone();
+                                    // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
                                 }
                                 _ => ()
                             }
