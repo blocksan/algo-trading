@@ -1,4 +1,4 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{Mutex as SyncMutex};
 use mongodb::{Collection, Database};
 
 use crate::{common::{raw_stock::RawStock, enums::AlgoTypes, redis_client::RedisClient}, 
@@ -14,9 +14,9 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
     trade_signal_collection: Collection<TradeSignal>,
     mut order_manager: order_manager::order_dispatcher::OrderManager,
     orders_collection: Collection<order_manager::order_dispatcher::Order>,
-    redis_client: &Mutex<RedisClient>,
+    redis_client: &SyncMutex<RedisClient>,
     _database_instance: Database,
-    shared_order_ledger: Arc<Mutex<Vec<Order>>>
+    shared_order_ledger: &mut Vec<Order>
 ){
 
     // mut hammer_ledger: HammerPatternUtil, hammer_candle_collection: Collection<HammerCandle>
@@ -35,7 +35,7 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
                         trade_keeper
                             .add_trade_signal(&trade_signal, trade_signal_collection.clone())
                             .await;
-                        order_manager.check_and_dispatch_order(trade_signal,redis_client, orders_collection.clone(), shared_order_ledger.clone()).await;
+                        order_manager.check_and_dispatch_order(trade_signal,redis_client, orders_collection.clone(), shared_order_ledger).await;
                     }
                     None => {
                         // println!("No Trading Signal Opportunity Found");

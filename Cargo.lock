@@ -47,6 +47,7 @@ dependencies = [
  "tokio-tungstenite",
  "tungstenite 0.15.0",
  "url",
+ "uuid",
 ]
 
 [[package]]

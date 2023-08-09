@@ -119,7 +119,7 @@ impl HammerPatternUtil {
 
             match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
                 Ok(result) => {
-                    println!("Hammer candle inserted into the database {:?}", result);
+                    // println!("Hammer candle inserted into the database {:?}", result);
                 },
                 Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
             }
