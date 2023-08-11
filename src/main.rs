@@ -13,7 +13,8 @@ use order_manager::{
     pnl_state::{self, CurrentPnLState, PnLConfiguration},
     trade_signal_keeper::{self, TradeSignal},
 };
-use std::sync::{Mutex, Arc};
+use tokio::sync::Mutex;
+use std::sync::{Mutex as SyncMutex, Arc};
 extern crate mongodb;
 extern crate tokio;
 use mongodb::{options::ClientOptions, Client};
@@ -84,31 +85,31 @@ async fn main() {
     //END -> add new User into the database
 
     //START -> add the pnl_configuration into the database
-    // let pnl_configuration_collection_name = "pnl_configurations";
-    // let pnl_configuration_collection = client
-    //     .database(database_name)
-    //     .collection::<PnLConfiguration>(pnl_configuration_collection_name);
+    let pnl_configuration_collection_name = "pnl_configurations";
+    let pnl_configuration_collection = client
+        .database(database_name)
+        .collection::<PnLConfiguration>(pnl_configuration_collection_name);
 
     // pnl_state::PnLConfiguration::new_static_config(pnl_configuration_collection.clone()).await;
     //END -> add the pnl_configuration into the database
 
     //START -> add the current_pnl_state into the database
-    // let current_pnl_state_collection_name = "current_pnl_states";
+    let current_pnl_state_collection_name = "current_pnl_states";
 
     //TODO: Only update current market state at 1 min data tick and other time frame can copy the stats from it.
     // 1. current_day_open high close low -> can be picked from 1 min only
     // 2. previous_day_open high close low -> can be picked from 1 min only
     // Others stats will be calculated seperately for each timeframe
 
-    // let current_pnl_state_collection = client
-    //     .database(database_name)
-    //     .collection::<CurrentPnLState>(current_pnl_state_collection_name);
+    let current_pnl_state_collection = client
+        .database(database_name)
+        .collection::<CurrentPnLState>(current_pnl_state_collection_name);
 
-    // pnl_state::CurrentPnLState::new_static_current_pnl_state(
-    //     current_pnl_state_collection.clone(),
-    //     pnl_configuration_collection.clone(),
-    // )
-    // .await;
+    pnl_state::CurrentPnLState::new_static_current_pnl_state(
+        current_pnl_state_collection.clone(),
+        pnl_configuration_collection.clone(),
+    )
+    .await;
     //END -> add the current_pnl_state into the database
 
     let thread_worker_configs = vec![
@@ -188,7 +189,7 @@ async fn main() {
     //START -> Oneminute Socket reading code
     async fn ingest_data_via_stream(
         thread_worker_config: ThreadWorkerConfig,
-        redis_client: &Mutex<RedisClient>,
+        redis_client: &SyncMutex<RedisClient>,
     ) -> Result<(), Box<dyn Error>> {
         if thread_worker_config.thread_job_type == ThreadJobType::TradeWatcherCron {
             Ok(())
@@ -215,8 +216,9 @@ async fn main() {
                 .unwrap();
 
             println!("Connected to WebSocket server: {}", server_url);
-
+           
             while let Some(msg) = ws_stream.next().await {
+                
                 match msg {
                     Ok(message) => {
                         if message.is_text() {
@@ -302,8 +304,13 @@ async fn main() {
 
                             raw_stock_ledger.add_raw_stock(raw_stock.clone());
 
+                            // let temp = shared_order_ledger.lock().unwrap();
+                            // temp.push(value)
+                            let mut locked_shared_order_ledger = shared_order_ledger.lock().await;
+
                             match thread_worker_config.time_frame {
                                 TimeFrame::FiveMinutes => {
+
                                     CurrentMarketState::calculate_market_state(
                                         &raw_stock,
                                         thread_worker_config.time_frame.clone(),
@@ -325,14 +332,20 @@ async fn main() {
                                     orders_collection.clone(),
                                     redis_client.clone(),
                                     database_instance.clone(),
-                                    shared_order_ledger.clone(),
+                                    &mut locked_shared_order_ledger
                                 )
                                 .await;
+                                drop(locked_shared_order_ledger);
                                 },
                                 TimeFrame::OneMinute =>{
-                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(), shared_order_ledger.clone()).await;
+                                    println!();
+                                    println!("Received Stock: {:?} at Timeframe {}", message.to_text().unwrap(), thread_worker_config.time_frame );
+                                    println!();
+                                    
+                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(), &mut locked_shared_order_ledger).await;
                                     // let temp = shared_order_ledger.lock().unwrap().clone();
                                     // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
+                                    drop(locked_shared_order_ledger);
                                 }
                                 _ => ()
                             }

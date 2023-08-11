@@ -3,11 +3,12 @@ use crate::common::{
     date_parser::new_current_date_time_in_desired_stock_datetime_format,
     enums::{AlgoTypes, TradeType},
     redis_client::RedisClient,
-    utils::{self, order_cache_key_formatter},
+    utils::{self, order_cache_key_formatter}, raw_stock::RawStock,
 };
-use mongodb::{bson::{doc, Document}, options::{FindOneOptions, UpdateOptions}, Collection};
+use mongodb::{bson::{doc, Document, oid::ObjectId}, options::{FindOneOptions, UpdateOptions}, Collection};
 use serde::{Deserialize, Serialize};
-use std::{fmt, sync::{Mutex, Arc}};
+use std::{fmt, sync::{Mutex, Arc, MutexGuard}};
+use uuid::Uuid;
 
 // #[derive(Debug, Clone, PartialEq)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -16,17 +17,28 @@ pub struct Order {
     pub trade_position_type: TradeType,
     pub trade_algo_type: AlgoTypes,
     pub entry_price: f32,
+    pub entry_price_delta: f32,
+    pub actual_entry_price: f32,
     pub exit_price: f32,
+    pub exit_price_delta: f32,
+    pub actual_exit_price: f32,
     pub trade_sl: f32,
     pub trade_target: f32,
     pub is_trade_open: bool,
+    pub is_trade_executed: bool,
     pub qty: i32,
     pub total_price: f32,
-    pub trade_taken_at: String,
+    pub order_placed_at: String,
+    pub trade_executed_at: String,
     pub trade_closed_at: String,
     pub order_id: String,
+    pub order_cache_key: String,
     pub closing_profit: f32,
     pub is_profitable_trade: bool,
+    pub algo_id: ObjectId,
+    pub trade_signal_id: ObjectId,
+    pub raw_stock: RawStock,
+
 }
 
 impl Order {
@@ -35,34 +47,54 @@ impl Order {
         trade_position_type: TradeType,
         trade_algo_type: AlgoTypes,
         entry_price: f32,
+        entry_price_delta: f32,
+        actual_entry_price: f32,
         exit_price: f32,
+        exit_price_delta: f32,
+        actual_exit_price: f32,
         trade_sl: f32,
         trade_target: f32,
         is_trade_open: bool,
+        is_trade_executed: bool,
         qty: i32,
         total_price: f32,
-        trade_taken_at: String,
+        order_placed_at: String,
+        trade_executed_at: String,
         trade_closed_at: String,
         order_id: String,
+        order_cache_key: String,
         closing_profit: f32,
         is_profitable_trade: bool,
+        algo_id: ObjectId,
+        trade_signal_id: ObjectId,
+        raw_stock: RawStock,
     ) -> Order {
         Order {
             symbol,
             trade_position_type,
             trade_algo_type,
             entry_price,
+            entry_price_delta,
+            actual_entry_price,
             exit_price,
+            exit_price_delta,
+            actual_exit_price,
             trade_sl,
             trade_target,
             is_trade_open,
+            is_trade_executed,
             qty,
             total_price,
-            trade_taken_at,
+            order_placed_at,
+            trade_executed_at,
             trade_closed_at,
             order_id,
+            order_cache_key,
             closing_profit,
             is_profitable_trade,
+            algo_id,
+            trade_signal_id,
+            raw_stock,
         }
     }
 
@@ -84,17 +116,36 @@ impl Order {
             "trade_position_type": self.trade_position_type.clone().to_string(),
             "trade_algo_type": self.trade_algo_type.clone().to_string(),
             "entry_price": self.entry_price.clone(),
+            "entry_price_delta": self.entry_price_delta.clone(),
+            "actual_entry_price": self.actual_entry_price.clone(),
             "exit_price": self.exit_price.clone(),
+            "exit_price_delta": self.exit_price_delta.clone(),
+            "actual_exit_price": self.actual_exit_price.clone(),
             "trade_sl": self.trade_sl.clone(),
             "trade_target": self.trade_target.clone(),
             "is_trade_open": self.is_trade_open.clone(),
+            "is_trade_executed": self.is_trade_executed.clone(),
             "qty": self.qty.clone(),
             "total_price": self.total_price.clone(),
-            "trade_taken_at": self.trade_taken_at.clone(),
+            "order_placed_at": self.order_placed_at.clone(),
+            "trade_executed_at": self.trade_executed_at.clone(),
             "trade_closed_at": self.trade_closed_at.clone(),
             "order_id": self.order_id.clone(),
+            "order_cache_key": self.order_cache_key.clone(),
             "closing_profit": self.closing_profit.clone(),
             "is_profitable_trade": self.is_profitable_trade.clone(),
+            "algo_id": self.algo_id.clone(),
+            "trade_signal_id": self.trade_signal_id.clone(),
+            "raw_stock": {
+                "symbol": self.raw_stock.symbol.clone(),
+                "date": self.raw_stock.date.clone(),
+                "open": self.raw_stock.open,
+                "high": self.raw_stock.high,
+                "low": self.raw_stock.low,
+                "close": self.raw_stock.close,
+                "volume": self.raw_stock.volume,
+                "market_time_frame": self.raw_stock.market_time_frame.to_string()
+            }
         }
     }
 }
@@ -123,7 +174,7 @@ impl OrderManager {
         trade_signal: TradeSignal,
         redis_client: &Mutex<RedisClient>,
         order_collection: Collection<Order>,
-        shared_order_ledger: Arc<Mutex<Vec<Order>>>
+        shared_order_ledger: &mut Vec<Order>
     ) -> () {
         let order_cache_key = utils::order_cache_key_formatter(
             &trade_signal.raw_stock.symbol,
@@ -150,19 +201,29 @@ impl OrderManager {
                 trade_signal.trade_algo_type.clone(),
                 trade_signal.entry_price,
                 0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 trade_signal.trade_sl,
                 trade_signal.trade_target,
-                true,
+                true, //will be updated to false once the order is executed (order exited at exit price) on the exchange ie. Zerodha
+                false, //will be updated to true once the order is executed (order executed at entry price) on the exchange ie. Zerodha
                 trade_signal.qty,
                 trade_signal.total_price,
-                trade_signal.trade_signal_requested_at,
+                new_current_date_time_in_desired_stock_datetime_format(),
                 "".to_string(),
+                "".to_string(),
+                Uuid::new_v4().to_string(),
                 order_cache_key_formatter(
                     trade_signal.raw_stock.symbol.as_str(),
                     &trade_signal.trade_algo_type,
                 ), //This is the order id which will be generated by the Zerodha API once the order is placed
                 0.0,
                 false,
+                trade_signal.algo_id.clone(),
+                trade_signal.id.clone(),
+                trade_signal.raw_stock.clone(),
             );
 
             //TODO:: add logic to call the Zerodha API to place the order
@@ -172,13 +233,26 @@ impl OrderManager {
                     match redis_client
                         .lock()
                         .unwrap()
-                        .set_data(order_cache_key.as_str(), serde_json::to_string(&order.clone()).unwrap().as_str())
+                        .set_data(order.order_id.as_str(), serde_json::to_string(&order.clone()).unwrap().as_str())
                     {
                         Ok(_) => {
-                            println!("Order added in Redis for key => {}", order_cache_key);
+                            // println!("Order added in Redis for key => {}", order.order_id);
                         }
                         Err(e) => {
                             println!("Error while adding order in Redis => {:?}", e);
+                        }
+                    }
+
+                    match redis_client
+                        .lock()
+                        .unwrap()
+                        .set_data(order_cache_key.as_str(), "true")
+                    {
+                        Ok(_) => {
+                            // println!("Order cache key added in Redis for key => {}", order_cache_key);
+                        }
+                        Err(e) => {
+                            println!("Error while adding order cache key in Redis => {:?}", e);
                         }
                     }
                 }
@@ -187,7 +261,8 @@ impl OrderManager {
                 }
             }
             // self.orders.push(order.clone());
-            shared_order_ledger.lock().unwrap().push(order.clone());
+            shared_order_ledger.push(order.clone());
+            drop(shared_order_ledger);
             ()
         }
     }
@@ -203,7 +278,9 @@ impl OrderManager {
     ) -> bool {
         let mut order_exists = match redis_client.lock().unwrap().get_data(cache_key) {
             Ok(data) => {
-                true
+                // println!("Order exists in Redis for key => {:?}", data);
+                data.trim().parse().unwrap()
+                // true
             }
             Err(e) => {
                 println!(
@@ -237,51 +314,50 @@ impl OrderManager {
     }
 
     pub async fn exit_and_update_order(&mut self, order: &Order, exit_price: f32, redis_client: &Mutex<RedisClient>, order_collection: &Collection<Order>) -> Option<Order> {
-        // for (index, order_in_orders) in self.orders.iter().enumerate() {
-        //     if order_in_orders.order_id == order.order_id {
-        //         order_index = index;
-        //         break;
-        //     }
-        // }
-
-        //TODO: call the Zerodha API to exit the order
-
         let (closing_profit, is_profitable_trade) =
             OrderManager::calculate_profit(order.clone(), exit_price);
+        let exit_price_delta = exit_price - order.exit_price;
 
-        let new_order = Order::new(
+        let updated_order = Order::new(
             order.symbol.clone(),
             order.trade_position_type.clone(),
             order.trade_algo_type.clone(),
             order.entry_price.clone(),
+            order.entry_price_delta.clone(),
+            order.actual_entry_price.clone(),
+            exit_price,
+            exit_price_delta,
             exit_price,
             order.trade_sl.clone(),
             order.trade_target.clone(),
             false,
-            order.qty.clone(),
-            order.total_price.clone(),
-            order.trade_taken_at.clone(),
+            true,
+            order.qty,
+            order.total_price,
+            order.order_placed_at.clone(),
+            order.trade_executed_at.clone(),
             new_current_date_time_in_desired_stock_datetime_format(),
             order.order_id.clone(),
+            order.order_cache_key.clone(),
             closing_profit,
             is_profitable_trade,
+            order.algo_id.clone(),
+            order.trade_signal_id.clone(),
+            order.raw_stock.clone(),
         );
-
-        let order_cache_key =
-            utils::order_cache_key_formatter(new_order.symbol.as_str(), &new_order.trade_algo_type);
-
+        let order_cache_key = order.order_cache_key.clone();
 
         // let redis_client = RedisClient::get_instance();
-        let filter = doc! {"order_id": order_cache_key.clone() };
+        let filter = doc! {"order_id": updated_order.order_id.clone() };
         let options = UpdateOptions::builder().build();
-        let order_document = doc!{"$set":new_order.clone().to_document()};
+        let order_document = doc!{"$set":updated_order.clone().to_document()};
         match order_collection.update_one(
                 filter,
                 order_document,            
                 options,
             ).await {
-                Ok(result) => {
-                    println!("Successfully updated the order in MongoDB {:?}",result);
+                Ok(_result) => {
+                    // println!("Successfully updated the order in MongoDB {:?}",result);
                 },
                 Err(e) => {
                     println!("Error in MongoDB while updating the order: {:?} error {:?}", order.order_id,e);
@@ -289,16 +365,97 @@ impl OrderManager {
         }
             
 
-        match redis_client.lock().unwrap().set_data(order_cache_key.as_str(), serde_json::to_string(&new_order.clone()).unwrap().as_str()) {
+        match redis_client.lock().unwrap().set_data(updated_order.order_id.as_str(), serde_json::to_string(&updated_order.clone()).unwrap().as_str()) {
             Ok(_) => {
-                println!("Order updated in Redis for order_id => {}", order_cache_key);
+                // println!("Order updated in Redis for order_id => {}", updated_order.order_id);
             }
             Err(e) => {
                 println!("Not able to update/delete the order_id {:?} with Error {:?}", order_cache_key, e);
             }
         }
 
-        Some(new_order)
+        match redis_client.lock().unwrap().set_data(&order_cache_key, "false") {
+            Ok(_) => {
+                // println!("Order cache updated in Redis for order_cache_key => {}", order_cache_key);
+            }
+            Err(e) => {
+                println!("Not able to update/delete the order_cache_key {:?} with Error {:?}", order_cache_key, e);
+            }
+        }
+
+        Some(updated_order)
+        //calculate current PnL
+    }
+
+    pub async fn mark_order_executed(&mut self, order: &Order, actual_entry_price: f32, redis_client: &Mutex<RedisClient>, order_collection: &Collection<Order>) -> Option<Order> {
+       let entry_price_delta = actual_entry_price - order.entry_price;
+        let executed_order = Order::new(
+            order.symbol.clone(),
+            order.trade_position_type.clone(),
+            order.trade_algo_type.clone(),
+            order.entry_price.clone(),
+            entry_price_delta,
+            actual_entry_price,
+            order.exit_price.clone(),
+            order.exit_price_delta.clone(),
+            order.actual_exit_price.clone(),
+            order.trade_sl.clone(),
+            order.trade_target.clone(),
+            order.is_trade_open,
+            true,
+            order.qty,
+            order.total_price,
+            order.order_placed_at.clone(),
+            new_current_date_time_in_desired_stock_datetime_format(),
+            order.trade_closed_at.clone(),
+            order.order_id.clone(),
+            order.order_cache_key.clone(),
+            order.closing_profit.clone(),
+            order.is_profitable_trade,
+            order.algo_id.clone(),
+            order.trade_signal_id.clone(),
+            order.raw_stock.clone(),
+        );
+
+        let order_cache_key = order.order_cache_key.clone();
+
+        // let redis_client = RedisClient::get_instance();
+        let filter = doc! {"order_id": executed_order.order_id.clone() };
+        let options = UpdateOptions::builder().build();
+        let order_document = doc!{"$set":executed_order.clone().to_document()};
+        match order_collection.update_one(
+                filter,
+                order_document,            
+                options,
+            ).await {
+                Ok(_result) => {
+                    // println!("Successfully updated the order in MongoDB {:?}",result);
+                },
+                Err(e) => {
+                    println!("Error in MongoDB while executing the order: {:?} error {:?}", order.order_id,e);
+                }
+        }
+            
+
+        match redis_client.lock().unwrap().set_data(executed_order.order_id.as_str(), serde_json::to_string(&executed_order.clone()).unwrap().as_str()) {
+            Ok(_) => {
+                // println!("Order executed in Redis for order_id => {}", executed_order.order_id);
+            }
+            Err(e) => {
+                println!("Not able to execute the order_id {:?} with Error {:?}", order_cache_key, e);
+            }
+        }
+
+        // match redis_client.lock().unwrap().set_data(&order_cache_key, "true") {
+        //     Ok(_) => {
+        //         // println!("Order cache updated in Redis for order_cache_key => {}", order_cache_key);
+        //     }
+        //     Err(e) => {
+        //         println!("Not able to execute the order_cache_key {:?} with Error {:?}", order_cache_key, e);
+        //     }
+        // }
+
+        Some(executed_order)
         //calculate current PnL
     }
 

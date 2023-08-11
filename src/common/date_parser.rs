@@ -41,4 +41,37 @@ pub fn return_only_date_from_datetime(date: &str) -> String {
     date_time.format("%Y_%m_%d").to_string()
 }
 
+#[allow(dead_code, unused_variables)]
+pub fn return_only_time_from_datetime(date_option: Option<String>) -> NaiveTime {
+    let date = if date_option.is_none() {
+        new_current_date_time_in_desired_stock_datetime_format()
+    } else {
+        date_option.unwrap()
+    };
+    let date_time = 
+    match DateTime::parse_from_str(date.as_str(), DESIRED_STOCK_DATETIME_FORMAT){
+        Ok(date_time) => date_time,
+        Err(e) => {
+            DateTime::parse_from_str(date.as_str(), FILE_STOCK_DATETIME_FORMAT).unwrap()
+        }
+    };
+    date_time.time()
+}
+
+pub fn if_first_time_greater_than_second_time(
+    first_time: Option<NaiveTime>,
+    second_time: Option<NaiveTime>,
+) -> bool {
+    
+    if first_time.is_none() || second_time.is_none() {
+        return false;
+    }
+
+    if first_time.unwrap() > second_time.unwrap() {
+        return true;
+    }
+
+    false
+}
+
 // }
