@@ -10,7 +10,7 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format},
+    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format, parse_date_in_stock_format},
     enums::AlgoTypes,
     redis_client::RedisClient,
     utils,
@@ -18,7 +18,7 @@ use crate::common::{
 
 use super::order_dispatcher::Order;
 
-pub const CURRENT_STOCK_DATE: &str = "2022-10-21 09:40:00+05:30";
+pub const CURRENT_STOCK_DATE: &str = "2022-10-22 09:40:00+05:30";
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentPnLState {
@@ -108,9 +108,10 @@ impl CurrentPnLState {
         current_pnl_state_collection: Collection<CurrentPnLState>,
         pnl_configuration_collection: Collection<PnLConfiguration>,
     ) {
+        let start_dated_formatted = DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z").unwrap();
         let filter = doc! {
             "start_trade_date": {
-                "$gt" : CURRENT_STOCK_DATE
+                "$gte" : start_dated_formatted.to_string()
             }
         }; //TODO: fetch it for the current day only by adding end_trade_date as well
            //DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z").unwrap().to_string();
@@ -123,7 +124,8 @@ impl CurrentPnLState {
             Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
                 Ok(data) => {
                     pnl_configuration_found = Some(data); //TODO: for each configuration against a user, create a new current pnl state against it.
-                    println!("Successfully fetched PnL configuration");
+                    
+                    println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
                 }
                 Err(e) => {
                     println!("Error while fetching PnL configuration: {}", e);
