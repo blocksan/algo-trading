@@ -25,7 +25,7 @@ use crate::{
         date_parser,
         enums::{AlgoTypes, RootSystemConfig, ThreadJobType, ThreadWorkerConfig},
         raw_stock::{RawStock, RawStockLedger},
-    }, trade_watcher::monitor_trade,
+    }, trade_watcher::monitor_trade, user::user::User,
 };
 use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 
@@ -68,10 +68,10 @@ async fn main() {
     let shared_order_ledger: Arc<Mutex<Vec<Order>>> = Arc::new(Mutex::new(Vec::new()));
 
     //START -> add new User into the database
-    // let user_collection_name = "users";
-    // let user_collection = client
-    //     .database(database_name)
-    //     .collection::<user_module::User>(user_collection_name);
+    let user_collection_name = "users";
+    let user_collection = client
+        .database(database_name)
+        .collection::<User>(user_collection_name);
 
     // let user = user_module::User::new(
     //     1,
@@ -90,7 +90,7 @@ async fn main() {
         .database(database_name)
         .collection::<PnLConfiguration>(pnl_configuration_collection_name);
 
-    // pnl_state::PnLConfiguration::new_static_config(pnl_configuration_collection.clone()).await;
+    pnl_state::PnLConfiguration::new_static_config(pnl_configuration_collection.clone()).await;
     //END -> add the pnl_configuration into the database
 
     //START -> add the current_pnl_state into the database
@@ -111,7 +111,6 @@ async fn main() {
     )
     .await;
     //END -> add the current_pnl_state into the database
-
     let thread_worker_configs = vec![
         ThreadWorkerConfig {
             thread_job_type: ThreadJobType::DataConsumerViaSocket,
@@ -123,11 +122,13 @@ async fn main() {
                 current_market_state_collection: current_market_state_collection.clone(),
                 orders_collection: orders_collection.clone(),
                 trade_signal_collection: trade_signal_collection.clone(),
+                user_collection: user_collection.clone(),
                 server_url: "ws://localhost:5554".to_string(),
                 tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
+                current_pnl_state_collection: current_pnl_state_collection.clone(),
             },
         }, //oneminute socket
         // ThreadWorkerConfig{
@@ -144,11 +145,13 @@ async fn main() {
                 current_market_state_collection: current_market_state_collection.clone(),
                 orders_collection: orders_collection.clone(),
                 trade_signal_collection: trade_signal_collection.clone(),
+                user_collection: user_collection.clone(),
                 server_url: "ws://localhost:5556".to_string(),
                 tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
+                current_pnl_state_collection: current_pnl_state_collection.clone(),
             },
         }, //fiveminute socket
         ThreadWorkerConfig {
@@ -161,11 +164,13 @@ async fn main() {
                 current_market_state_collection: current_market_state_collection.clone(),
                 orders_collection: orders_collection.clone(),
                 trade_signal_collection: trade_signal_collection.clone(),
+                user_collection: user_collection.clone(),
                 server_url: "ws://localhost:5557".to_string(),
                 tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
+                current_pnl_state_collection: current_pnl_state_collection.clone(),
             },
         }, // "ws://localhost:5556", //fiveminute socket
            // "ws://localhost:5557", //fifteenminute socket
@@ -201,11 +206,13 @@ async fn main() {
                 current_market_state_collection,
                 orders_collection,
                 trade_signal_collection,
+                user_collection,
                 server_url,
                 tradeable_algo_types,
                 trade_keeper,
                 mut order_manager,
                 shared_order_ledger,
+                current_pnl_state_collection
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();
@@ -332,6 +339,7 @@ async fn main() {
                                     orders_collection.clone(),
                                     redis_client.clone(),
                                     database_instance.clone(),
+                                    user_collection.clone(),
                                     &mut locked_shared_order_ledger
                                 )
                                 .await;
@@ -342,7 +350,7 @@ async fn main() {
                                     println!("Received Stock: {:?} at Timeframe {}", message.to_text().unwrap(), thread_worker_config.time_frame );
                                     println!();
                                     
-                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(), &mut locked_shared_order_ledger).await;
+                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(),  current_pnl_state_collection.clone(),&mut locked_shared_order_ledger).await;
                                     // let temp = shared_order_ledger.lock().unwrap().clone();
                                     // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
                                     drop(locked_shared_order_ledger);

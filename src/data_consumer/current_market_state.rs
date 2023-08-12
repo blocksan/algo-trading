@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
-use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, Document}};
+use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, Document, oid::ObjectId}};
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentMarketState {
@@ -27,8 +27,11 @@ pub struct CurrentMarketState {
     pub last_consecutive_red_candle_count: i32,
 
     pub symbol: String,
-    pub trade_date: String,
-    pub last_updated_at: String,
+
+    #[serde(rename = "_id") ]
+    pub id: ObjectId,
+    pub created_at: String,
+    pub updated_at: String,
     pub cache_key: String,
 
 }
@@ -53,8 +56,8 @@ pub struct CurrentMarketState {
 //             "last_consecutive_green_candle_count": current_market_state.last_consecutive_green_candle_count,
 //             "last_consecutive_red_candle_count": current_market_state.last_consecutive_red_candle_count,
 //             "symbol": current_market_state.symbol,
-//             "trade_date": current_market_state.trade_date,
-//             "last_updated_at": current_market_state.last_updated_at,
+//             "created_at": current_market_state.created_at,
+//             "updated_at": current_market_state.updated_at,
 //             "cache_key": current_market_state.cache_key,
 //         }
 //     }
@@ -79,8 +82,8 @@ pub struct CurrentMarketState {
 //         doc.insert("last_consecutive_green_candle_count", self.last_consecutive_green_candle_count);
 //         doc.insert("last_consecutive_red_candle_count", self.last_consecutive_red_candle_count);
 //         doc.insert("symbol", self.symbol);
-//         doc.insert("trade_date", self.trade_date);
-//         doc.insert("last_updated_at", self.last_updated_at);
+//         doc.insert("created_at", self.created_at);
+//         doc.insert("updated_at", self.updated_at);
 //         Ok(())
 //     }
 // }
@@ -105,8 +108,9 @@ impl CurrentMarketState {
         last_consecutive_green_candle_count: i32,
         last_consecutive_red_candle_count: i32,
         symbol: String,
-        trade_date: String,
-        last_updated_at: String,
+        id: ObjectId,
+        created_at: String,
+        updated_at: String,
         cache_key: String,
     ) -> CurrentMarketState {
         CurrentMarketState {
@@ -127,34 +131,10 @@ impl CurrentMarketState {
             last_consecutive_green_candle_count,
             last_consecutive_red_candle_count,
             symbol,
-            trade_date,
-            last_updated_at,
+            id,
+            created_at,
+            updated_at,
             cache_key
-        }
-    }
-
-    pub fn update_current_candle_market_trend(&mut self, current_state: CurrentMarketState) -> Self {
-        Self {
-            market_time_frame: current_state.market_time_frame,
-            previous_candle_market_trend: current_state.previous_candle_market_trend,
-            current_candle_market_trend: current_state.current_candle_market_trend,
-            current_sma: current_state.current_sma,
-            previous_candle_open: current_state.previous_candle_open,
-            previous_candle_high: current_state.previous_candle_high,
-            previous_candle_low: current_state.previous_candle_low,
-            previous_candle_close: current_state.previous_candle_close,
-            previous_candle_volume: current_state.previous_candle_volume,
-            current_candle_open: current_state.current_candle_open,
-            current_candle_high: current_state.current_candle_high,
-            current_candle_low: current_state.current_candle_low,
-            current_candle_close: current_state.current_candle_close,
-            current_candle_volume: current_state.current_candle_volume,
-            last_consecutive_green_candle_count: current_state.last_consecutive_green_candle_count,
-            last_consecutive_red_candle_count: current_state.last_consecutive_red_candle_count,
-            symbol: current_state.symbol,
-            trade_date: current_state.trade_date,
-            last_updated_at: current_state.last_updated_at,
-            cache_key: current_state.cache_key
         }
     }
 
@@ -177,8 +157,9 @@ impl CurrentMarketState {
             "last_consecutive_green_candle_count": self.last_consecutive_green_candle_count,
             "last_consecutive_red_candle_count": self.last_consecutive_red_candle_count,
             "symbol": self.symbol.to_string(),
-            "trade_date": self.trade_date.to_string(),
-            "last_updated_at": self.last_updated_at.to_string(),
+            "id": self.id.to_string(),
+            "created_at": self.created_at.to_string(),
+            "updated_at": self.updated_at.to_string(),
             "cache_key": self.cache_key.to_string()
         }
     }
@@ -187,19 +168,8 @@ impl CurrentMarketState {
 
         let trade_date_only = date_parser::return_only_date_from_datetime(stock.date.as_str());
         let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
-        let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
-        let options = FindOneOptions::builder().build();
-        let previous_market_state = match current_market_state_collection.find_one(filter, options).await {
-            Ok(Some(data)) => {
-                // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
-                Some(data)
-            },
-            Ok(None) => None,
-            Err(e) => {
-                println!("Error while fetching the data from MongoDB => {:?}", e);
-                None
-            }
-        };
+        
+        let previous_market_state = Self::fetch_previous_market_state(current_market_state_cache_key.as_str(), redis_client, current_market_state_collection).await;
 
          let current_market_state = match time_frame {
             TimeFrame::OneMinute => {
@@ -211,7 +181,7 @@ impl CurrentMarketState {
                 //  Self::calculate_market_state_for_threeminutes(stock)
             },
             TimeFrame::FiveMinutes => {
-                Self::calculate_market_state_for_fiveminutes(stock, redis_client, raw_stock_ledger, current_market_state_cache_key, previous_market_state) 
+                Self::calculate_market_state_for_fiveminutes(stock, raw_stock_ledger, current_market_state_cache_key, previous_market_state) 
             },
             TimeFrame::FifteenMinutes => {
                 None
@@ -238,24 +208,7 @@ impl CurrentMarketState {
             }
         };
 
-        match current_market_state {
-            Some(current_market_state) => {
-                let filter = doc! {"cache_key": current_market_state.cache_key.clone() };
-                let options = UpdateOptions::builder().upsert(true).build();
-                let document = doc!{"$set":current_market_state.to_document()};
-                match current_market_state_collection.update_one(filter,  document, options).await {
-                    Ok(_) => {
-                        // println!("Successfully inserted a current_market_state into the collection");
-                    },
-                    Err(e) => {
-                        println!("Error while updating a current_market_state into the collection: {:?} error {:?}", current_market_state,e);
-                    }
-                }
-            },
-            None => {
-                println!("No market state found for the stock: {}", stock.symbol);
-            }
-        }
+        Self::push_current_market_state_to_redis_mongo(&current_market_state, redis_client, current_market_state_collection).await;
     }
 
     fn calculate_market_state_for_oneminute(stock: &RawStock) -> Option<CurrentMarketState>{
@@ -277,6 +230,7 @@ impl CurrentMarketState {
             2,
             2,
             "ADANIGREEN".to_owned(),
+            ObjectId::new(),
             date_parser::new_current_date_time_in_desired_stock_datetime_format(),
             date_parser::new_current_date_time_in_desired_stock_datetime_format(),
             "cache_key".to_owned() //TODO: generate cache key
@@ -285,33 +239,12 @@ impl CurrentMarketState {
     fn calculate_market_state_for_threeminutes(stock: &RawStock)->Option<CurrentMarketState>{
         None
     }
-    fn calculate_market_state_for_fiveminutes(stock: &RawStock, redis_client: &Mutex<RedisClient>, raw_stock_ledger: &RawStockLedger, current_market_state_cache_key: String, previous_market_state_db: Option<CurrentMarketState>)-> Option<CurrentMarketState>{
-        
-        
-
-        let previous_market_state =  match previous_market_state_db {
-            Some(previous_market_state) => Some(previous_market_state),
-            None => {
-                match redis_client.lock().unwrap().get_data(current_market_state_cache_key.as_str()) {
-                    Ok(data) => {
-                        // println!("Data fetched from Redis for key => {}", current_market_state_cache_key);
-                        let deserialised_data = serde_json::from_str::<CurrentMarketState>(data.as_str()).unwrap();
-                        Some(deserialised_data)
-                    }
-                    Err(e) => {
-                        println!("Error while fetching the data from Redis => {:?}", e);
-                        //fetch from the mongodb
-                        None
-                    }
-                }
-            }
-        };
-
-        //TODO: find the logic for calculating the current day market trend based on SMA and EMA or other indicators
+    fn calculate_market_state_for_fiveminutes(stock: &RawStock, raw_stock_ledger: &RawStockLedger, current_market_state_cache_key: String, previous_market_state: Option<CurrentMarketState>)-> Option<CurrentMarketState>{
+         //TODO: find the logic for calculating the current day market trend based on SMA and EMA or other indicators
         let sma_window_size = 9; //TimeFrame::FiveMinutes as i32;
         let (current_sma, current_candle_market_trend) = Self::identify_market_trend_SMA(&raw_stock_ledger.raw_stocks, stock, sma_window_size);
 
-        let updated_market_state = match previous_market_state {
+        match previous_market_state {
             Some(previous_market_state) => {
                 let mut update_required = false;
                 let new_stock_low = if stock.low < previous_market_state.current_candle_low {
@@ -378,7 +311,8 @@ impl CurrentMarketState {
                         last_consecutive_green_candle_count,
                         last_consecutive_red_candle_count,
                         stock.symbol.to_owned(),
-                        previous_market_state.trade_date,
+                        previous_market_state.id,
+                        previous_market_state.created_at,
                         date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                         current_market_state_cache_key.clone(),
                     );
@@ -407,30 +341,14 @@ impl CurrentMarketState {
                     if stock.close > stock.open {1} else {0}, //TODO:calculate it => adding dummy data now
                     if stock.open > stock.close {1} else {0}, //TODO: calculate it => adding dummy data now
                     stock.symbol.to_owned(),
+                    ObjectId::new(),
                     date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                     date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                     current_market_state_cache_key.clone()
                 ))
             }
-        };
-
-        match updated_market_state {
-            Some(updated_market_state) => {
-                // println!("Updated market state => {:?}", updated_market_state);
-                match redis_client.lock().unwrap().set_data(current_market_state_cache_key.as_str(), serde_json::to_string(&updated_market_state.clone()).unwrap().as_str()) {
-                    Ok(_) => {
-                        // println!("Data set in Redis for key => {}", current_market_state_cache_key);
-                        Some(updated_market_state)
-                    }
-                    Err(e) => {
-                        println!("Error while setting the data in Redis => {:?}", e);
-                        None
-                    }
-                }
-            }
-            None => None
-            
         }
+
     }
     fn calculate_market_state_for_fifteenminutes(stock: &RawStock)->Option<CurrentMarketState>{
         None
@@ -469,6 +387,68 @@ impl CurrentMarketState {
                 (current_sma, MarketTrend::Bearish)
             } else {
                 (current_sma, MarketTrend::Sideways)
+            }
+        }
+    }
+
+    async fn push_current_market_state_to_redis_mongo(current_market_state: &Option<CurrentMarketState>, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>){
+        match current_market_state {
+            Some(current_market_state) => {
+                let filter = doc! {"cache_key": current_market_state.cache_key.clone() };
+                let options = UpdateOptions::builder().upsert(true).build();
+                let document = doc!{"$set":current_market_state.to_document()};
+                match current_market_state_collection.update_one(filter,  document, options).await {
+                    Ok(_) => {
+                        // println!("Successfully inserted a current_market_state into the collection");
+                    },
+                    Err(e) => {
+                        println!("Error while updating a current_market_state into the collection: {:?} error {:?}", current_market_state,e);
+                    }
+                }
+
+                match redis_client.lock().unwrap().set_data(current_market_state.cache_key.as_str(), serde_json::to_string(&current_market_state.clone()).unwrap().as_str()) {
+                    Ok(_) => {
+                        // println!("Data set in Redis for key => {}", current_market_state_cache_key);
+                    }
+                    Err(e) => {
+                        println!("Error while setting the data in Redis => {:?}", e);
+                    }
+                }
+            },
+            None => {
+                println!("No current market state");
+            }
+        }
+    }
+    async fn fetch_previous_market_state(current_market_state_cache_key: &str, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
+
+        let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
+        let options = FindOneOptions::builder().build();
+        let previous_market_state = match redis_client.lock().unwrap().get_data(current_market_state_cache_key) {
+                    Ok(data) => {
+                        // println!("Data fetched from Redis for key => {}", current_market_state_cache_key);
+                        let deserialised_data = serde_json::from_str::<CurrentMarketState>(data.as_str()).unwrap();
+                        Some(deserialised_data)
+                    }
+                    Err(e) => {
+                        println!("Error while fetching the data from Redis => {:?}", e);
+                        //fetch from the mongodb
+                        None
+                    }
+        };
+        if previous_market_state.is_some(){
+            previous_market_state
+        }else{
+            match current_market_state_collection.find_one(filter, options).await {
+                Ok(Some(data)) => {
+                    // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
+                    Some(data)
+                },
+                Ok(None) => None,
+                Err(e) => {
+                    println!("Error while fetching the data from MongoDB => {:?}", e);
+                    None
+                }
             }
         }
     }

@@ -1,3 +1,4 @@
+use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 
 use crate::common::enums::TimeFrame;

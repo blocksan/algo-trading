@@ -42,6 +42,7 @@ dependencies = [
  "plotters",
  "redis",
  "serde",
+ "serde_derive",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
