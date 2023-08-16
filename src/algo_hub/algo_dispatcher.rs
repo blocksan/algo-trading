@@ -4,8 +4,9 @@ use mongodb::{Collection, Database};
 use crate::{common::{raw_stock::RawStock, enums::AlgoTypes, redis_client::RedisClient}, 
 order_manager::{trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, order_dispatcher::{Order, OrderManager}}, user::user::User};
 
-use super::hammer_pattern::{HammerCandle, HammerPatternUtil};
+use super::{hammer_pattern::{HammerCandle, HammerPatternUtil}, support_resistance_fractol};
 
+const FRACTOL_PIVOT_DEPTH : usize = 3;
 
 pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: Vec<AlgoTypes>, 
     mut hammer_ledger: HammerPatternUtil, 
@@ -25,6 +26,8 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
     // I do need to make it more configurable using threads here, so that I can run multiple algorithms at the same time
 
     for tradeable_algo_type in tradeable_algo_types.iter() {
+        
+
         match tradeable_algo_type {
             AlgoTypes::HammerPatternAlgo => {
                 let trade_signal_option = hammer_ledger
@@ -49,5 +52,6 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
 
             },
         }
+        
     }
 }
