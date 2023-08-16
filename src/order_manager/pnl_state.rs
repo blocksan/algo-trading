@@ -10,7 +10,7 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format, parse_date_in_stock_format},
+    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format},
     enums::AlgoTypes,
     redis_client::RedisClient,
     utils,
@@ -472,7 +472,7 @@ impl PnLConfiguration {
         let max_target_hit_count = 4;
         let max_risk_capacity = 500.0;
         let max_trade_capital = 4000000.0;
-        let user_id = ObjectId::from_str("64c53a83711b2ffa2e0a862d").unwrap();
+        let user_id = ObjectId::from_str("64d8febebe3ea57f392c36df").unwrap();
         let id = ObjectId::new();
         let new_pnl_configuration = PnLConfiguration::new(
             created_at,

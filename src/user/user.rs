@@ -11,6 +11,7 @@ pub struct User {
     pub password: String,
     pub created_at: String,
     pub updated_at: String,
+    pub active: bool,
 }
 
 impl User {
@@ -21,6 +22,7 @@ impl User {
         password: String,
         created_at: String,
         updated_at: String,
+        active: bool,
     ) -> User {
         User {
             id,
@@ -29,6 +31,7 @@ impl User {
             password,
             created_at,
             updated_at,
+            active
         }
     }
 
@@ -44,7 +47,16 @@ impl User {
             self.password.clone(),
             self.created_at.clone(),
             self.updated_at.clone(),
+            true,
         );
+
+        let existing_user = User::get_user_by_email(&user.email, user_collection.clone()).await;
+
+        if existing_user.is_some() {
+            println!("User already exists");
+            return;
+        }
+
         match user_collection.insert_one(user.clone(), None).await {
             Ok(_) => {
                 println!("Successfully inserted new User into the collection");

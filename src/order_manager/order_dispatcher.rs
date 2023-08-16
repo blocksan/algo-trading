@@ -224,7 +224,7 @@ impl OrderManager {
             );
 
             
-            let order_exists = OrderManager::check_if_order_exists(
+            let order_exists = OrderManager::check_if_open_order_exists(
                 order_cache_key.as_str(),
                 redis_client,
                 &order_collection,
@@ -359,7 +359,7 @@ impl OrderManager {
         &self.orders
     }
 
-    async fn check_if_order_exists(
+    async fn check_if_open_order_exists(
         cache_key: &str,
         redis_client: &Mutex<RedisClient>,
         order_collection: &Collection<Order>,
@@ -390,7 +390,7 @@ impl OrderManager {
         order_exists = match order_collection.find_one(filter, options).await {
             Ok(Some(order)) => {
                 println!("Existing order found for {} => {:?}", cache_key, order);
-                true
+                order.is_trade_open
             }
             Ok(None) => false,
             Err(e) => {
