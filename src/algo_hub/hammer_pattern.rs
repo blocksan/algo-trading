@@ -1,5 +1,4 @@
 
-#[path = "../common/mod.rs"] mod common;
 use crate::common::enums::{AlgoTypes, TradeType, TimeFrame};
 use crate::common::number_parser::return_2_precision_for_float;
 use crate::common::raw_stock::RawStock;
@@ -8,7 +7,6 @@ use crate::order_manager::trade_signal_keeper::TradeSignal;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
-const QTY:i32 = 10;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HammerCandle {
     pub symbol: String,
@@ -22,7 +20,7 @@ pub struct HammerCandle {
     pub is_green_candle: bool,
     pub is_hammer: bool,
     pub body_size_ratio: f32,
-    pub identified_at: String,
+    pub created_at: String,
     #[serde(rename = "_id")]
     pub id: ObjectId,
     // pub _id : String, //MongoDB ID => Initialized with empty string, will be updated when inserted into DB
@@ -40,7 +38,7 @@ impl HammerCandle {
         is_green_candle: bool,
         is_hammer: bool,
         body_size_ratio: f32,
-        identified_at: String,
+        created_at: String,
         id: ObjectId,
     ) -> HammerCandle {
         HammerCandle {
@@ -55,7 +53,7 @@ impl HammerCandle {
             is_green_candle,
             is_hammer,
             body_size_ratio,
-            identified_at,
+            created_at,
             id
         }
     }
@@ -118,13 +116,13 @@ impl HammerPatternUtil {
             );
 
             match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
-                Ok(result) => {
+                Ok(_result) => {
                     // println!("Hammer candle inserted into the database {:?}", result);
                 },
                 Err(e) => println!("Error while inserting hammer candle into the database => {:?}", e)
             }
             self.add_into_hammer_pattern_ledger(hammer_candle);
-            self.check_for_trade_opportunity()
+            self.analyse_and_create_trading_signal()
         }else{
             None
         }
@@ -189,7 +187,7 @@ impl HammerPatternUtil {
     }
 
     
-    pub fn check_for_trade_opportunity(&mut self) -> Option<TradeSignal> {
+    pub fn analyse_and_create_trading_signal(&mut self) -> Option<TradeSignal> {
         let previous_hammer_candle_exists = self.hammer_pattern_ledger.last();
         if previous_hammer_candle_exists.is_none()  {
             return None;
@@ -206,12 +204,15 @@ impl HammerPatternUtil {
             false => (TradeType::Long, return_2_precision_for_float(previous_hammer_candle.open*0.95)) //95% of the open price can be a good entry point
         }; //hammer candle always going to give long trades
 
+        //TODO: read current market state, analyse and decide whether to take the trade or not
+        //like: if market is in downtrend, then don't take the trade or 5 EMA is below 20 EMA, then don't take the trade, etc...
+
         // let candle = previous_hammer_candle.clone();
         if entry_price > 0.0 {
             let trade_sl = return_2_precision_for_float(entry_price*0.95); //5% SL
             let trade_target = return_2_precision_for_float(entry_price*1.10); //10% Target
             // self.hammer_pattern_ledger.pop();
-            match HammerPatternUtil::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target, previous_hammer_candle.id) {
+            match TradeSignal::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target, previous_hammer_candle.id) {
                 Some(trade_signal) => {
                     Some(trade_signal)
                 },
@@ -224,32 +225,6 @@ impl HammerPatternUtil {
 
     }
 
-    fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32, algo_id: ObjectId ) -> Option<TradeSignal> {
-        let trade_signal = TradeSignal::new(
-            RawStock::new(
-                symbol,
-                date,
-                close,
-                high,
-                low,
-                open,
-                volume,
-                market_time_frame,
-            ),
-            trade_position_type,
-            algo_type,
-            date_parser::new_current_date_time_in_desired_stock_datetime_format(),
-            entry_price,
-            trade_sl,
-            trade_target,
-            QTY,
-            entry_price*QTY as f32,
-            ObjectId::new(),
-            algo_id
-
-        );
-        Some(trade_signal)
-    }
 
 }
 

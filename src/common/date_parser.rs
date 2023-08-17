@@ -58,6 +58,7 @@ pub fn return_only_time_from_datetime(date_option: Option<String>) -> NaiveTime 
     date_time.time()
 }
 
+#[allow(dead_code, unused_variables)]
 pub fn if_first_time_greater_than_second_time(
     first_time: Option<NaiveTime>,
     second_time: Option<NaiveTime>,

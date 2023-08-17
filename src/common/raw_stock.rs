@@ -1,3 +1,4 @@
+use mongodb::bson::{doc, Document};
 use serde::{Deserialize, Serialize};
 
 use crate::common::enums::TimeFrame;
@@ -35,6 +36,19 @@ impl RawStock{
 
     pub fn calculate_if_green_candle(open: f32, close: f32) -> bool {
         open < close
+    }
+
+    pub fn to_document(&self) -> Document {
+        doc! {
+            "symbol": self.symbol.clone(),
+            "date": self.date.clone(),
+            "close": self.close.clone(),
+            "high": self.high.clone(),
+            "low": self.low.clone(),
+            "open": self.open.clone(),
+            "volume": self.volume.clone(),
+            "market_time_frame": self.market_time_frame.clone().to_string()
+        }
     }
 }
 

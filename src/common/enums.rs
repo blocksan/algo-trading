@@ -1,9 +1,9 @@
 use mongodb::{Database, Collection};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use std::{fmt, sync::{Arc}};
+use std::{fmt, sync::Arc};
 
-use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self}};
+use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self, pnl_state::CurrentPnLState}, user::user::User};
 
 
 #[allow(dead_code)]
@@ -101,6 +101,8 @@ pub struct RootSystemConfig {
     pub current_market_state_collection: Collection<CurrentMarketState>,
     pub orders_collection: Collection<Order>,
     pub trade_signal_collection: Collection<TradeSignal>,
+    pub current_pnl_state_collection: Collection<CurrentPnLState>,
+    pub user_collection: Collection<User>,
     pub server_url: String,
     pub tradeable_algo_types: Vec<AlgoTypes>,
     pub trade_keeper: TradeSignalsKeeper, 

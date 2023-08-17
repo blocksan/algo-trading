@@ -3,6 +3,9 @@ name = "algo-trading"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "socket_data_1min"
+path = "src/socket_data_1min.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -17,6 +20,7 @@ tokio = { version = "1", features = ["full"] }
 futures = "0.3.28"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_derive = "1.0"
 lazy_static = "1.4"
 tokio-tungstenite = "0.16.0"
 tungstenite = "0.15.0"

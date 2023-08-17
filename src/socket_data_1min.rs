@@ -1,5 +1,3 @@
-use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::connect_async;
 use url::Url;
 use std::error::Error;
@@ -31,7 +29,8 @@ async fn connect_websocket(server_url: &str) -> Result<(), Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() {
-    let server_urls = vec![
+   println!("differen than main file");
+   let server_urls = vec![
         "ws://localhost:5554", // Replace this with your WebSocket server URLs
         "ws://localhost:5555",
         "ws://localhost:5556",
