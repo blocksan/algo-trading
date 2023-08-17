@@ -6,7 +6,7 @@ pub mod trade_watcher;
 pub mod user;
 use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
-use data_consumer::current_market_state::CurrentMarketState;
+use data_consumer::{current_market_state::CurrentMarketState, support_resistance_fractol::find_support_resistance};
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
@@ -32,9 +32,11 @@ use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 use std::error::Error;
 use tokio_tungstenite::connect_async;
 use url::Url;
+use std::time::{Instant, Duration};
 
 #[tokio::main]
 async fn main() {
+    let start_time = Instant::now();
     let mongo_url = "mongodb://localhost:27017";
     let database_name = "algo_trading";
 
@@ -112,25 +114,25 @@ async fn main() {
     .await;
     //END -> add the current_pnl_state into the database
     let thread_worker_configs = vec![
-        ThreadWorkerConfig {
-            thread_job_type: ThreadJobType::DataConsumerViaSocket,
-            time_frame: TimeFrame::OneMinute,
-            root_system_config: RootSystemConfig {
-                database_instance: db.clone(),
-                hammer_candle_collection: hammer_candle_collection.clone(),
-                hammer_ledger: hammer_ledger.clone(),
-                current_market_state_collection: current_market_state_collection.clone(),
-                orders_collection: orders_collection.clone(),
-                trade_signal_collection: trade_signal_collection.clone(),
-                user_collection: user_collection.clone(),
-                server_url: "ws://localhost:5554".to_string(),
-                tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
-                trade_keeper: trade_keeper.clone(),
-                order_manager: order_manager.clone(),
-                shared_order_ledger: shared_order_ledger.clone(),
-                current_pnl_state_collection: current_pnl_state_collection.clone(),
-            },
-        }, //oneminute socket
+        // ThreadWorkerConfig {
+        //     thread_job_type: ThreadJobType::DataConsumerViaSocket,
+        //     time_frame: TimeFrame::OneMinute,
+        //     root_system_config: RootSystemConfig {
+        //         database_instance: db.clone(),
+        //         hammer_candle_collection: hammer_candle_collection.clone(),
+        //         hammer_ledger: hammer_ledger.clone(),
+        //         current_market_state_collection: current_market_state_collection.clone(),
+        //         orders_collection: orders_collection.clone(),
+        //         trade_signal_collection: trade_signal_collection.clone(),
+        //         user_collection: user_collection.clone(),
+        //         server_url: "ws://localhost:5554".to_string(),
+        //         tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
+        //         trade_keeper: trade_keeper.clone(),
+        //         order_manager: order_manager.clone(),
+        //         shared_order_ledger: shared_order_ledger.clone(),
+        //         current_pnl_state_collection: current_pnl_state_collection.clone(),
+        //     },
+        // }, //oneminute socket
         // ThreadWorkerConfig{
         //     server_url: "ws://localhost:5555".to_string(),
         //     time_frame: TimeFrame::ThreeMinutes
@@ -376,7 +378,8 @@ async fn main() {
     //END -> Oneminute Socket reading code
     // return;
     futures::future::join_all(tasks).await;
-
+    let end_time = Instant::now();
+    println!("Total Time Taken: {:?}", end_time.duration_since(start_time));
     return;
 
     // println!("Hammer Pattern => {:?}", hammer_ledger.fetch_hammer_pattern_ledger());

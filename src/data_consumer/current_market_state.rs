@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 
 use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
-use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, Document, oid::ObjectId}};
+use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
 use serde::{Deserialize, Serialize};
+
+use super::support_resistance_fractol::find_support_resistance;
+const PIVOT_DEPTH: usize = 4; //4 pivot depth means 3 candle left side and 3 candle right side
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentMarketState {
 
@@ -33,6 +36,10 @@ pub struct CurrentMarketState {
     pub created_at: String,
     pub updated_at: String,
     pub cache_key: String,
+
+    pub raw_stocks: Vec<RawStock>,
+    pub support: Vec<f32>,
+    pub resistance: Vec<f32>
 
 }
 
@@ -112,6 +119,9 @@ impl CurrentMarketState {
         created_at: String,
         updated_at: String,
         cache_key: String,
+        raw_stocks: Vec<RawStock>,
+        support: Vec<f32>,
+        resistance: Vec<f32>
     ) -> CurrentMarketState {
         CurrentMarketState {
             market_time_frame,
@@ -134,11 +144,15 @@ impl CurrentMarketState {
             id,
             created_at,
             updated_at,
-            cache_key
+            cache_key,
+            raw_stocks,
+            support,
+            resistance
         }
     }
 
     fn to_document(&self) -> Document {
+        let raw_stocks_document = self.raw_stocks.iter().map(|raw_stock| raw_stock.to_document()).collect::<Vec<Document>>();
         doc!{
             "market_time_frame": self.market_time_frame.to_string(),
             "previous_candle_market_trend": self.previous_candle_market_trend.to_string(),
@@ -160,7 +174,12 @@ impl CurrentMarketState {
             "id": self.id.to_string(),
             "created_at": self.created_at.to_string(),
             "updated_at": self.updated_at.to_string(),
-            "cache_key": self.cache_key.to_string()
+            "cache_key": self.cache_key.to_string(),
+            "raw_stocks": raw_stocks_document,
+            "support": self.support.clone(),
+            "resistance": self.resistance.clone()
+
+
         }
     }
 
@@ -181,7 +200,7 @@ impl CurrentMarketState {
                 //  Self::calculate_market_state_for_threeminutes(stock)
             },
             TimeFrame::FiveMinutes => {
-                Self::calculate_market_state_for_fiveminutes(stock, raw_stock_ledger, current_market_state_cache_key, previous_market_state) 
+                Self::calculate_market_state_for_fiveminutes(stock.clone(), raw_stock_ledger, current_market_state_cache_key, previous_market_state) 
             },
             TimeFrame::FifteenMinutes => {
                 None
@@ -211,11 +230,11 @@ impl CurrentMarketState {
         Self::push_current_market_state_to_redis_mongo(&current_market_state, redis_client, current_market_state_collection).await;
     }
 
-    fn calculate_market_state_for_oneminute(stock: &RawStock) -> Option<CurrentMarketState>{
+    fn calculate_market_state_for_oneminute(stock: RawStock) -> Option<CurrentMarketState>{
         Some(CurrentMarketState::new (
             TimeFrame::OneMinute,
-            MarketTrend::Bearish,
-            MarketTrend::Bearish,
+            MarketTrend::Sideways,
+            MarketTrend::Sideways,
             0.0,
             100.0,
             200.0,
@@ -233,35 +252,34 @@ impl CurrentMarketState {
             ObjectId::new(),
             date_parser::new_current_date_time_in_desired_stock_datetime_format(),
             date_parser::new_current_date_time_in_desired_stock_datetime_format(),
-            "cache_key".to_owned() //TODO: generate cache key
+            "cache_key".to_owned(), //TODO: generate cache key
+            [stock].to_vec(),
+            [0.0].to_vec(),
+            [0.0].to_vec()
         ))
     }
-    fn calculate_market_state_for_threeminutes(stock: &RawStock)->Option<CurrentMarketState>{
+    fn calculate_market_state_for_threeminutes(stock: RawStock)->Option<CurrentMarketState>{
         None
     }
-    fn calculate_market_state_for_fiveminutes(stock: &RawStock, raw_stock_ledger: &RawStockLedger, current_market_state_cache_key: String, previous_market_state: Option<CurrentMarketState>)-> Option<CurrentMarketState>{
+    fn calculate_market_state_for_fiveminutes(stock: RawStock, raw_stock_ledger: &RawStockLedger, current_market_state_cache_key: String, previous_market_state: Option<CurrentMarketState>)-> Option<CurrentMarketState>{
          //TODO: find the logic for calculating the current day market trend based on SMA and EMA or other indicators
         let sma_window_size = 9; //TimeFrame::FiveMinutes as i32;
-        let (current_sma, current_candle_market_trend) = Self::identify_market_trend_SMA(&raw_stock_ledger.raw_stocks, stock, sma_window_size);
+        let (current_sma, current_candle_market_trend) = Self::identify_market_trend_SMA(&raw_stock_ledger.raw_stocks, &stock, sma_window_size);
 
         match previous_market_state {
-            Some(previous_market_state) => {
-                let mut update_required = false;
+            Some(mut previous_market_state) => {
                 let new_stock_low = if stock.low < previous_market_state.current_candle_low {
-                    update_required = true;
                     stock.low
                 } else {
                     previous_market_state.current_candle_low
                 };
                 let new_stock_high = if stock.high > previous_market_state.current_candle_high {
-                    update_required = true;
                     stock.high
                 } else {
                     previous_market_state.current_candle_high
                 };
 
                 let new_stock_close = if stock.close < previous_market_state.current_candle_close {
-                    update_required = true;
                     stock.close
                 } else {
                     previous_market_state.current_candle_close
@@ -270,19 +288,20 @@ impl CurrentMarketState {
                 let new_stock_volume = previous_market_state.current_candle_volume + stock.volume;
                 
                 let last_consecutive_green_candle_count = if stock.close > stock.open {
-                    update_required = true;
                     previous_market_state.last_consecutive_green_candle_count + 1
                 } else {
                     0
                 };
 
                 let last_consecutive_red_candle_count = if stock.close < stock.open {
-                    update_required = true;
                     previous_market_state.last_consecutive_red_candle_count + 1
                 } else {
                     0
                 };
 
+                previous_market_state.raw_stocks.push(stock.clone());
+
+                let (support, resistance) =find_support_resistance(&previous_market_state.raw_stocks, PIVOT_DEPTH);
                 
                 // println!("last_consecutive_green_candle_count => {}", last_consecutive_green_candle_count);
                 // println!("last_consecutive_red_candle_count => {}", last_consecutive_red_candle_count);
@@ -291,6 +310,7 @@ impl CurrentMarketState {
                 // println!("current_candle_close => {}", stock.close.clone());
                 // println!("update_required => {}", update_required);
                 // println!("previous_market_state => {:?}", previous_market_state);
+                let update_required = true;
 
                 if update_required {
                     let current_market_state = CurrentMarketState::new(
@@ -315,6 +335,9 @@ impl CurrentMarketState {
                         previous_market_state.created_at,
                         date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                         current_market_state_cache_key.clone(),
+                        previous_market_state.raw_stocks,
+                        support,
+                        resistance
                     );
                     Some(current_market_state)
                 }else{
@@ -344,7 +367,10 @@ impl CurrentMarketState {
                     ObjectId::new(),
                     date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                     date_parser::new_current_date_time_in_desired_stock_datetime_format(),
-                    current_market_state_cache_key.clone()
+                    current_market_state_cache_key.clone(),
+                    [stock].to_vec(),
+                    [0.0].to_vec(),
+                    [0.0].to_vec()
                 ))
             }
         }

@@ -6,7 +6,6 @@ order_manager::{trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, order_di
 
 use super::hammer_pattern::{HammerCandle, HammerPatternUtil};
 
-
 pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: Vec<AlgoTypes>, 
     mut hammer_ledger: HammerPatternUtil, 
     hammer_candle_collection: Collection<HammerCandle>,
@@ -25,6 +24,8 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
     // I do need to make it more configurable using threads here, so that I can run multiple algorithms at the same time
 
     for tradeable_algo_type in tradeable_algo_types.iter() {
+        
+
         match tradeable_algo_type {
             AlgoTypes::HammerPatternAlgo => {
                 let trade_signal_option = hammer_ledger
@@ -49,5 +50,6 @@ pub async fn ingest_raw_stock_data(raw_stock: &RawStock, tradeable_algo_types: V
 
             },
         }
+        
     }
 }
