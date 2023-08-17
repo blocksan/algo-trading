@@ -3,7 +3,7 @@ use std::{thread, sync::{Arc, mpsc}};
 use crate::common::raw_stock::RawStock;
 
 
-pub fn find_support_resistance(stocks: &Vec<RawStock>, current_stock: RawStock,  pivot_depth: usize) -> (Vec<f32>, Vec<f32>){
+pub fn find_support_resistance(stocks: &Vec<RawStock>, pivot_depth: usize) -> (Vec<f32>, Vec<f32>){
     let mut support = vec![];
     let mut resistance = vec![];
     let arc_stocks = Arc::new(stocks.clone());
@@ -21,12 +21,9 @@ pub fn find_support_resistance(stocks: &Vec<RawStock>, current_stock: RawStock, 
         let (maxima_sender, maxima_receiver) = mpsc::channel();
         
         let local_minima_thread = thread::spawn(move || {
-            // println!("current_stock => {:?}", *local_minima_stocks_shared);
             let result = is_local_minima(pivot_depth, current_pivot_index,  local_minima_stocks_shared, current_stock_1);
             minima_sender.send(result).unwrap();
-            // drop(local_minima_stocks_shared);
-            // result
-            // false
+            
         });
 
         let local_maxima_thread = thread::spawn(move || {

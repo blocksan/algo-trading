@@ -4,9 +4,9 @@ pub mod data_consumer;
 pub mod order_manager;
 pub mod trade_watcher;
 pub mod user;
-use algo_hub::{hammer_pattern::{self, HammerCandle}, support_resistance_fractol};
+use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
-use data_consumer::current_market_state::CurrentMarketState;
+use data_consumer::{current_market_state::CurrentMarketState, support_resistance_fractol::find_support_resistance};
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
@@ -329,11 +329,6 @@ async fn main() {
                                         database_instance.clone(),
                                     )
                                     .await;
-                                    // let global_support = vec![0.0];
-                                    // let global_resistance = vec![0.0];
-                                    let (support, resistance) = support_resistance_fractol::find_support_resistance(&raw_stock_ledger.raw_stocks, raw_stock.clone(), 4 as usize);
-                                    println!("Support: {:?}, Resistance: {:?}", support, resistance);
-                                    continue;
     
                                 algo_dispatcher::ingest_raw_stock_data(
                                     &raw_stock,
