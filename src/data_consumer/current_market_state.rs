@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
-use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, Document, oid::ObjectId}};
+use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
 use serde::{Deserialize, Serialize};
 
 use super::support_resistance_fractol::find_support_resistance;
@@ -152,6 +152,7 @@ impl CurrentMarketState {
     }
 
     fn to_document(&self) -> Document {
+        let raw_stocks_document = self.raw_stocks.iter().map(|raw_stock| raw_stock.to_document()).collect::<Vec<Document>>();
         doc!{
             "market_time_frame": self.market_time_frame.to_string(),
             "previous_candle_market_trend": self.previous_candle_market_trend.to_string(),
@@ -174,6 +175,10 @@ impl CurrentMarketState {
             "created_at": self.created_at.to_string(),
             "updated_at": self.updated_at.to_string(),
             "cache_key": self.cache_key.to_string(),
+            "raw_stocks": raw_stocks_document,
+            "support": self.support.clone(),
+            "resistance": self.resistance.clone()
+
 
         }
     }
@@ -263,22 +268,18 @@ impl CurrentMarketState {
 
         match previous_market_state {
             Some(mut previous_market_state) => {
-                let mut update_required = false;
                 let new_stock_low = if stock.low < previous_market_state.current_candle_low {
-                    update_required = true;
                     stock.low
                 } else {
                     previous_market_state.current_candle_low
                 };
                 let new_stock_high = if stock.high > previous_market_state.current_candle_high {
-                    update_required = true;
                     stock.high
                 } else {
                     previous_market_state.current_candle_high
                 };
 
                 let new_stock_close = if stock.close < previous_market_state.current_candle_close {
-                    update_required = true;
                     stock.close
                 } else {
                     previous_market_state.current_candle_close
@@ -287,14 +288,12 @@ impl CurrentMarketState {
                 let new_stock_volume = previous_market_state.current_candle_volume + stock.volume;
                 
                 let last_consecutive_green_candle_count = if stock.close > stock.open {
-                    update_required = true;
                     previous_market_state.last_consecutive_green_candle_count + 1
                 } else {
                     0
                 };
 
                 let last_consecutive_red_candle_count = if stock.close < stock.open {
-                    update_required = true;
                     previous_market_state.last_consecutive_red_candle_count + 1
                 } else {
                     0
@@ -311,7 +310,7 @@ impl CurrentMarketState {
                 // println!("current_candle_close => {}", stock.close.clone());
                 // println!("update_required => {}", update_required);
                 // println!("previous_market_state => {:?}", previous_market_state);
-                update_required = true;
+                let update_required = true;
 
                 if update_required {
                     let current_market_state = CurrentMarketState::new(
