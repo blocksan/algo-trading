@@ -35,10 +35,11 @@ pub struct CurrentPnLState {
     pub current_target_hit_count: i32,
     pub max_target_hit_count: i32,
     pub target_hit_percentage: f32,
-    pub max_risk_capacity: f32,
+    pub max_sl_capacity: f32,
     pub max_trade_capital: f32,
     pub current_used_trade_capital: f32,
     pub is_eligible_for_trading: bool,
+    pub not_eligible_trading_reason: String,
     pub current_pnl_state_cache_key: String,
     pub pnl_configuration_id: ObjectId,
     pub trading_algo_types: Vec<AlgoTypes>,
@@ -64,9 +65,10 @@ impl CurrentPnLState {
         current_target_hit_count: i32,
         max_target_hit_count: i32,
         target_hit_percentage: f32,
-        max_risk_capacity: f32, //value will be saved in minus
+        max_sl_capacity: f32, //value will be saved in minus
         max_trade_capital: f32,
         is_eligible_for_trading: bool,
+        not_eligible_trading_reason: String,
         current_used_trade_capital: f32,
         current_pnl_state_cache_key: String,
         pnl_configuration_id: ObjectId,
@@ -90,9 +92,10 @@ impl CurrentPnLState {
             current_target_hit_count,
             max_target_hit_count,
             target_hit_percentage,
-            max_risk_capacity,
+            max_sl_capacity,
             max_trade_capital,
             is_eligible_for_trading,
+            not_eligible_trading_reason,
             current_used_trade_capital,
             current_pnl_state_cache_key,
             pnl_configuration_id,
@@ -151,13 +154,13 @@ impl CurrentPnLState {
                     let current_target_hit_count = 0;
                     let max_target_hit_count = pnl_configuration.max_target_hit_count;
                     let target_hit_percentage = 0.0;
-                    let max_risk_capacity = pnl_configuration.max_risk_capacity;
+                    let max_sl_capacity = pnl_configuration.max_sl_capacity;
                     let max_trade_capital = pnl_configuration.max_trade_capital;
                     let current_used_trade_capital = 0.0;
                     let is_eligible_for_trading = true;
                     let pnl_configuration_id = pnl_configuration.id.clone();
                     let user_id = pnl_configuration.user_id.clone();
-                    let (current_pnl_cache_key,current_pnl_cache_key_algo_types ) =
+                    let (current_pnl_cache_key,current_pnl_cache_algo_types_key ) =
                         Self::get_current_pnl_cache_key(start_trade_date.as_str(), user_id.to_string().as_str());
                     let created_at = new_current_date_time_in_desired_stock_datetime_format();
                     let updated_at = new_current_date_time_in_desired_stock_datetime_format();
@@ -176,9 +179,10 @@ impl CurrentPnLState {
                         current_target_hit_count,
                         max_target_hit_count,
                         target_hit_percentage,
-                        max_risk_capacity,
+                        max_sl_capacity,
                         max_trade_capital,
                         is_eligible_for_trading,
+                        "".to_string(),
                         current_used_trade_capital,
                         current_pnl_cache_key.clone(),
                         pnl_configuration_id,
@@ -192,8 +196,7 @@ impl CurrentPnLState {
                     new_current_pnl_state
                         .push_current_pnl_state_to_redis_mongo(
                             current_pnl_cache_key.as_str(),
-                            current_pnl_cache_key_algo_types.as_str(),
-                            new_current_pnl_state.clone(),
+                            current_pnl_cache_algo_types_key.as_str(),
                             &current_pnl_state_collection,
                         )
                         .await;
@@ -232,11 +235,11 @@ impl CurrentPnLState {
         }
     }
 
-    pub async fn update_current_pnl_state(
+    pub async fn update_current_pnl_state_via_order(
         close_order: &Order,
         current_pnl_state_collection: &Collection<CurrentPnLState>,
     ) -> () {
-        let (current_pnl_cache_key, current_pnl_cache_key_algo_types ) =
+        let (current_pnl_cache_key, current_pnl_cache_algo_types_key ) =
             Self::get_current_pnl_cache_key(close_order.order_closed_at.as_str(), close_order.user_id.to_string().as_str());
 
         let current_pnl_state_option =
@@ -261,33 +264,45 @@ impl CurrentPnLState {
 
             if current_pnl_state.current_sl_hit_count >= current_pnl_state.max_sl_hit_count {
                 current_pnl_state.is_eligible_for_trading = false;
+                current_pnl_state.not_eligible_trading_reason =
+                    "Max SL hit count reached".to_string();
             } else if current_pnl_state.current_target_hit_count
                 >= current_pnl_state.max_target_hit_count
             {
                 current_pnl_state.is_eligible_for_trading = false;
-            } else if current_pnl_state.current_pnl <= current_pnl_state.max_risk_capacity {
+                current_pnl_state.not_eligible_trading_reason =
+                    "Max target hit count reached".to_string();
+            } else if current_pnl_state.current_pnl <= current_pnl_state.max_sl_capacity {
                 current_pnl_state.is_eligible_for_trading = false;
+                current_pnl_state.not_eligible_trading_reason =
+                    "Max SL capacity reached".to_string();
             }
             current_pnl_state.updated_at = new_current_date_time_in_desired_stock_datetime_format();
 
             current_pnl_state
                 .push_current_pnl_state_to_redis_mongo(
                     current_pnl_cache_key.as_str(),
-                    current_pnl_cache_key_algo_types.as_str(),
-                    current_pnl_state.clone(),
+                    current_pnl_cache_algo_types_key.as_str(),
                     &current_pnl_state_collection,
                 )
                 .await;
         }
     }
 
+    // pub async fn update_current_pnl_state_not_eligible_trade_reason(
+
+    //     current_pnl_state_collection: &Collection<CurrentPnLState>,
+    // ) -> (){
+
+    // }
+
     pub async fn push_current_pnl_state_to_redis_mongo(
         self: &Self,
         current_pnl_cache_key: &str,
-        current_pnl_cache_key_algo_types: &str,
-        current_pnl_state: CurrentPnLState,
+        current_pnl_cache_algo_types_key: &str,
         current_pnl_state_collection: &Collection<CurrentPnLState>,
     ) {
+        let current_pnl_state = self;
         let redis_client = RedisClient::get_instance();
         match redis_client.lock().unwrap().set_data(
             current_pnl_cache_key,
@@ -320,7 +335,7 @@ impl CurrentPnLState {
         }
 
         match redis_client.lock().unwrap().set_data(
-            current_pnl_cache_key_algo_types,
+            current_pnl_cache_algo_types_key,
             serde_json::to_string(&current_pnl_state.trading_algo_types).unwrap().as_str(),
         ) {
             Ok(_) => {
@@ -364,6 +379,7 @@ impl CurrentPnLState {
 
 
     fn to_document(&self) -> Document {
+        let trading_algo_types_doc = self.trading_algo_types.iter().map(|algo_type| algo_type.to_string()).collect::<Vec<String>>();
         doc! {
             "start_trade_date": self.start_trade_date.to_string(),
             "end_trade_date": self.end_trade_date.to_string(),
@@ -378,11 +394,17 @@ impl CurrentPnLState {
             "current_target_hit_count": self.current_target_hit_count,
             "max_target_hit_count": self.max_target_hit_count,
             "target_hit_percentage": self.target_hit_percentage,
-            "max_risk_capacity": self.max_risk_capacity,
+            "max_sl_capacity": self.max_sl_capacity,
             "max_trade_capital": self.max_trade_capital,
             "current_used_trade_capital": self.current_used_trade_capital,
             "is_eligible_for_trading": self.is_eligible_for_trading,
+            "not_eligible_trading_reason": self.not_eligible_trading_reason.to_string(),
             "current_pnl_state_cache_key": self.current_pnl_state_cache_key.to_string(),
+            "pnl_configuration_id": self.pnl_configuration_id.clone(),
+            "trading_algo_types": trading_algo_types_doc,
+            "created_at": self.created_at.to_string(),
+            "updated_at": self.updated_at.to_string(),
+            "user_id": self.user_id.clone(),
         }
     }
 }
@@ -405,7 +427,7 @@ pub struct PnLConfiguration {
     pub targeted_pnl_percentage: f32,
     pub max_target_hit_count: i32,
 
-    pub max_risk_capacity: f32,
+    pub max_sl_capacity: f32,
     pub max_trade_capital: f32,
     pub user_id: ObjectId,
 
@@ -426,7 +448,7 @@ impl PnLConfiguration {
         targeted_pnl: f32,
         targeted_pnl_percentage: f32,
         max_target_hit_count: i32,
-        max_risk_capacity: f32,
+        max_sl_capacity: f32,
         max_trade_capital: f32,
         user_id: ObjectId,
         id: ObjectId,
@@ -443,7 +465,7 @@ impl PnLConfiguration {
             targeted_pnl,
             targeted_pnl_percentage,
             max_target_hit_count,
-            max_risk_capacity,
+            max_sl_capacity,
             max_trade_capital,
             user_id,
             id,
@@ -470,7 +492,7 @@ impl PnLConfiguration {
         let targeted_pnl = 1000.0;
         let targeted_pnl_percentage = 10.0;
         let max_target_hit_count = 4;
-        let max_risk_capacity = 500.0;
+        let max_sl_capacity = -500.0;
         let max_trade_capital = 4000000.0;
         let user_id = ObjectId::from_str("64d8febebe3ea57f392c36df").unwrap();
         let id = ObjectId::new();
@@ -486,7 +508,7 @@ impl PnLConfiguration {
             targeted_pnl,
             targeted_pnl_percentage,
             max_target_hit_count,
-            max_risk_capacity,
+            max_sl_capacity,
             max_trade_capital,
             user_id,
             id,

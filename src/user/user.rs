@@ -96,7 +96,7 @@ impl User {
                 // cursor.unwrap().try_collect::<Vec<_>>().await
                 match users.try_collect::<Vec<_>>().await {
                     Ok(users) => {
-                        println!("Users found {:?}", users);
+                        // println!("Users found {:?}", users);
                         Some(users)
                     },
                     Err(e) => {

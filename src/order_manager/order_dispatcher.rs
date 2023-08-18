@@ -187,6 +187,7 @@ impl OrderManager {
         order_collection: Collection<Order>,
         user_collection: Collection<User>,
         shared_order_ledger: &mut Vec<Order>,
+        current_pnl_state_collection: Collection<CurrentPnLState>,
     ) -> () {
         let users = User::get_all_active_users(user_collection).await;
         let mut dispatched_orders: Vec<Order> = vec![];
@@ -269,12 +270,14 @@ impl OrderManager {
                 );
                 
 
-                let (is_order_tradeable, current_pnl_state) =
+                let (is_order_tradeable, current_pnl_state, not_eligible_trading_reason) =
                     OrderManager::check_if_order_is_tradeable(
                         redis_client,
                         current_pnl_cache_key.as_str(),
                         &order,
-                    );
+                        current_pnl_cache_algo_types_key.as_str(),
+                        &current_pnl_state_collection
+                    ).await;
 
                 if !is_order_tradeable {
                     println!(
@@ -389,7 +392,6 @@ impl OrderManager {
         let options: FindOneOptions = FindOneOptions::builder().build();
         order_exists = match order_collection.find_one(filter, options).await {
             Ok(Some(order)) => {
-                println!("Existing order found for {} => {:?}", cache_key, order);
                 order.is_trade_open
             }
             Ok(None) => false,
@@ -398,6 +400,9 @@ impl OrderManager {
                 false
             }
         };
+        if order_exists {
+            println!("Existing order found for cache_key {}", cache_key);
+        }
         order_exists
     }
 
@@ -503,7 +508,7 @@ impl OrderManager {
         order: &Order,
         actual_entry_price: f32,
         redis_client: &Mutex<RedisClient>,
-        order_collection: &Collection<Order>,
+        order_collection: &Collection<Order>
     ) -> Option<Order> {
         let entry_price_delta = actual_entry_price - order.entry_price;
         let executed_order = Order::new(
@@ -595,16 +600,18 @@ impl OrderManager {
         (profit, profit > 0.0)
     }
 
-    fn check_if_order_is_tradeable(
+    async fn check_if_order_is_tradeable(
         redis_client: &Mutex<RedisClient>,
         current_pnl_cache_key: &str,
         order: &Order,
-    ) -> (bool, Option<CurrentPnLState>) {
+        current_pnl_cache_algo_types_key: &str,
+        current_pnl_state_collection: &Collection<CurrentPnLState>,
+    ) -> (bool, Option<CurrentPnLState>, String) {
         let current_pnl = match redis_client.lock().unwrap().get_data(current_pnl_cache_key) {
             Ok(data) => {
                 let formatted_current_pnl =
                     serde_json::from_str::<CurrentPnLState>(data.as_str()).unwrap();
-                println!("Current PnL updated => {:?}", formatted_current_pnl.clone());
+                // println!("Current PnL updated => {:?}", formatted_current_pnl.clone());
                 Some(formatted_current_pnl)
             }
             Err(e) => {
@@ -615,20 +622,35 @@ impl OrderManager {
         };
 
         if current_pnl.is_none() {
+            let not_eligible_trading_reason = "No current PnL found".to_string();
             println!(
-                "No current PnL found for the current_pnl_cache_key => {:?}",
+                "{} the current_pnl_cache_key => {:?}",not_eligible_trading_reason,
                 current_pnl_cache_key
             );
-            return (false, None);
+            return (false, None, not_eligible_trading_reason);
         } else {
-            let current_pnl = current_pnl.unwrap();
+            let mut current_pnl = current_pnl.unwrap();
             if current_pnl.is_eligible_for_trading
                 && (current_pnl.current_used_trade_capital + order.total_price)
                     < current_pnl.max_trade_capital
             {
-                return (true, Some(current_pnl));
-            } else {
-                (false, None)
+                return (true, Some(current_pnl),"".to_string());
+            } else if !current_pnl.is_eligible_for_trading {
+                (false, None, current_pnl.not_eligible_trading_reason)
+            }
+            else if (current_pnl.current_used_trade_capital+order.total_price) > current_pnl.max_trade_capital {
+                let not_eligible_trading_reason = "Max trade capital limit reached".to_string();
+                current_pnl.is_eligible_for_trading = false;
+                current_pnl.not_eligible_trading_reason = not_eligible_trading_reason.clone();
+                current_pnl.push_current_pnl_state_to_redis_mongo(
+                    current_pnl_cache_key,
+                    current_pnl_cache_algo_types_key,
+                    current_pnl_state_collection
+                ).await;
+
+                (false, None, not_eligible_trading_reason)
+            }else{
+                (false, None, "Unknown reason".to_string())
             }
         }
     }

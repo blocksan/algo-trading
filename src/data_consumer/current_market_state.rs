@@ -1,11 +1,11 @@
+use colored::*;
 use std::sync::Mutex;
-
 use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
 use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
 use serde::{Deserialize, Serialize};
 
 use super::support_resistance_fractol::find_support_resistance;
-const PIVOT_DEPTH: usize = 4; //4 pivot depth means 3 candle left side and 3 candle right side
+const PIVOT_DEPTH: usize = 3; //4 pivot depth means 3 candle left side and 3 candle right side
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentMarketState {
 
@@ -184,7 +184,7 @@ impl CurrentMarketState {
     }
 
     pub async fn calculate_market_state(stock: &RawStock, time_frame: TimeFrame, current_market_state_collection: &Collection<CurrentMarketState>, redis_client: &Mutex<RedisClient>, raw_stock_ledger: &RawStockLedger, database_instance: Database) {
-
+        println!("Calculating market state for stock_time => {}", format!("{}",stock.date).yellow());
         let trade_date_only = date_parser::return_only_date_from_datetime(stock.date.as_str());
         let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
         
@@ -446,7 +446,7 @@ impl CurrentMarketState {
             }
         }
     }
-    async fn fetch_previous_market_state(current_market_state_cache_key: &str, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
+    pub async fn fetch_previous_market_state(current_market_state_cache_key: &str, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
 
         let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
         let options = FindOneOptions::builder().build();
@@ -478,5 +478,7 @@ impl CurrentMarketState {
             }
         }
     }
+
+    
 }
 
