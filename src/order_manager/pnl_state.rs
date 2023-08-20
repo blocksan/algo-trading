@@ -217,7 +217,7 @@ impl CurrentPnLState {
             Ok(data) => {
                 let formatted_current_pnl =
                     serde_json::from_str::<CurrentPnLState>(data.as_str()).unwrap();
-                println!("Current PnL updated => {:?}", formatted_current_pnl.clone());
+                // println!("Current PnL updated => {:?}", formatted_current_pnl.clone());
                 Some(formatted_current_pnl)
             }
             Err(e) => {
@@ -309,10 +309,10 @@ impl CurrentPnLState {
             serde_json::to_string(&current_pnl_state).unwrap().as_str(),
         ) {
             Ok(_) => {
-                println!(
-                    "Current PnL updated => {:?}",
-                    serde_json::to_string(&current_pnl_state).unwrap().as_str()
-                );
+                // println!(
+                //     "Current PnL updated => {:?}",
+                //     serde_json::to_string(&current_pnl_state).unwrap().as_str()
+                // );
             }
             Err(e) => {
                 println!("Not able to insert current PnL with Error {:?}", e);

@@ -12,7 +12,7 @@ pub async fn check_for_execute_opportunity(order_manager: &mut OrderManager, sto
     // let mut shared_orders = shared_order_ledger.lock().unwrap().clone();
     if shared_order_ledger.len() > 0 {
         println!("");
-        println!("{} orders currently open: {:?} with length {}", format!("{}","Execute:".blue()), shared_order_ledger, shared_order_ledger.len());
+        println!("{} orders count currently {}", format!("{}","Execute:".blue()), shared_order_ledger.len());
         println!("");
     }
     for (_index, order) in shared_order_ledger.iter_mut().enumerate(){
@@ -54,7 +54,7 @@ pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock:
     // let mut shared_orders = shared_order_ledger.lock().unwrap().clone();
     if shared_order_ledger.len() > 0 {
         println!("");
-        println!("{} orders currently open: {:?} with length {}", format!("{}","Exit:".red()), shared_order_ledger, shared_order_ledger.len());
+        println!("{} open orders currently {}", format!("{}","Exit:".red()), shared_order_ledger.len());
         println!("");
     }
     let mut closed_order_indexes: Vec<usize> = Vec::new();

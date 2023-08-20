@@ -12,8 +12,8 @@ use mongodb::Collection;
 use serde::{Deserialize, Serialize};
 const HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = 0.0025; //0.25% as a fraction
 const HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = 3;
-const HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = 150.0;
-const HAMMER_MAX_DROP_CANDLE_COUNT: usize = 3;
+const HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = 20.0; //TODO: configure these values based on the index or stocks
+const HAMMER_MAX_DROP_CANDLE_COUNT: usize = 2;
 const HAMMER_SL_MARGIN_POINTS : f32 = 1.0; //2 points
 const HAMMER_TARGET_MARGIN_MULTIPLIER : f32 = 1.5; //1.5 times of the lower wick
 
@@ -194,7 +194,7 @@ impl HammerPatternUtil {
         // println!("full_candle_height => {:?}", full_candle_height);
         // println!("body_to_full_candle_ratio => {:?}", body_to_full_candle_ratio);
         //Pattern 1: Condition for the pure Hammer Candle
-        let standalone_hammer = if body_to_full_candle_ratio <= 0.25 {
+        let mut standalone_hammer = if body_to_full_candle_ratio <= 0.25 {
             lower_wick > (2.1 * upper_wick)
         } else {
             lower_wick_to_body_ratio >= 1.75
@@ -210,7 +210,6 @@ impl HammerPatternUtil {
             println!("");
         }
 
-        
         let mut hammer_around_support = false;
         let mut hammer_after_drop = false;
         let mut hammer_after_red_candles = false;
@@ -219,7 +218,8 @@ impl HammerPatternUtil {
         let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
 
         let current_market_state_option = CurrentMarketState::fetch_previous_market_state(&current_market_state_cache_key,redis_client, current_market_state_collection).await;
-         if standalone_hammer && current_market_state_option.is_some(){
+        
+        if current_market_state_option.is_some(){
             let current_market_state = current_market_state_option.unwrap();
             //Pattern 2: Condition for the Hammer Candle above the Support Line
             for support_line in current_market_state.support.iter().rev() {
@@ -251,11 +251,20 @@ impl HammerPatternUtil {
 
             if hammer_after_drop {
                 println!("");
-                println!("-----*****-----");
-                println!("{}","Hammer Candle found after 150 points drop on BankNifty or 40 points drop on Nifty/FINNIFTY".red());
+                println!("-----*****----- ");
+                println!("found valid {} points drop", format!("{}",max_drop_threshold).red());
                 println!("{:?}", stock);
                 println!("-----*****-----");
                 println!("");
+                if !standalone_hammer && lower_wick_to_body_ratio >= 1.0 && upper_wick_to_body_ratio < 0.3 {
+                    standalone_hammer = true;
+                    println!("");
+                    println!("-----*****----- ");
+                    println!("Standalone Hammer Candle found after {} points drop", format!("{}",max_drop_threshold).red());
+                    println!("{:?}", stock);
+                    println!("-----*****-----");
+                    println!("");
+                }
             }
 
             //Pattern 4: Condition for the Hammer Candle after continuous 3 red candles
