@@ -1,4 +1,5 @@
 use colored::*;
+use crate::{HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE, HAMMER_RED_CANDLES_COUNT_THRESHOLD, HAMMER_MAX_DROP_THRESHOLD_VALUE, HAMMER_MAX_DROP_CANDLE_COUNT, HAMMER_SL_MARGIN_POINTS, HAMMER_TARGET_MARGIN_MULTIPLIER};
 use crate::common::enums::{AlgoTypes, TradeType, TimeFrame};
 use crate::common::raw_stock::RawStock;
 use crate::common::redis_client::RedisClient;
@@ -10,12 +11,12 @@ use crate::order_manager::trade_signal_keeper::TradeSignal;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
-const HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = 0.0025; //0.25% as a fraction
-const HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = 3;
-const HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = 20.0; //TODO: configure these values based on the index or stocks
-const HAMMER_MAX_DROP_CANDLE_COUNT: usize = 2;
-const HAMMER_SL_MARGIN_POINTS : f32 = 1.0; //2 points
-const HAMMER_TARGET_MARGIN_MULTIPLIER : f32 = 1.5; //1.5 times of the lower wick
+// const HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = 0.0025; //0.25% as a fraction
+// const HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = 3;
+// const HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = 20.0; //TODO: configure these values based on the index or stocks
+// const HAMMER_MAX_DROP_CANDLE_COUNT: usize = 2;
+// const HAMMER_SL_MARGIN_POINTS : f32 = 1.0; //2 points
+// const HAMMER_TARGET_MARGIN_MULTIPLIER : f32 = 1.5; //1.5 times of the lower wick
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HammerCandle {
@@ -224,7 +225,7 @@ impl HammerPatternUtil {
             //Pattern 2: Condition for the Hammer Candle above the Support Line
             for support_line in current_market_state.support.iter().rev() {
                     let support_price = *support_line;
-                    let max_allowable_difference = support_price * HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE;
+                    let max_allowable_difference = support_price * *HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE;
                     let absolute_differnce = (support_price - low).abs();
 
                     if absolute_differnce <= max_allowable_difference && support_price < low {
@@ -243,8 +244,8 @@ impl HammerPatternUtil {
             }
 
             //Pattern 3: Condition for the Hammer Candle after 150 points drop on BankNifty or 40 points drop on Nifty/FINNIFTY
-            let max_drop_threshold = HAMMER_MAX_DROP_THRESHOLD_VALUE; // BANKNIFTY //TODO: created configuration map from where drop_threshold value can be read based on the stock
-            let max_drop_candle_count = HAMMER_MAX_DROP_CANDLE_COUNT;
+            let max_drop_threshold = *HAMMER_MAX_DROP_THRESHOLD_VALUE; // BANKNIFTY //TODO: created configuration map from where drop_threshold value can be read based on the stock
+            let max_drop_candle_count = *HAMMER_MAX_DROP_CANDLE_COUNT;
             let valid_drop = previous_drop_in_stock(&current_market_state.raw_stocks, max_drop_candle_count, max_drop_threshold);
 
             hammer_after_drop = valid_drop;
@@ -268,11 +269,11 @@ impl HammerPatternUtil {
             }
 
             //Pattern 4: Condition for the Hammer Candle after continuous 3 red candles
-            hammer_after_red_candles = current_market_state.last_consecutive_red_candle_count >= HAMMER_RED_CANDLES_COUNT_THRESHOLD;
+            hammer_after_red_candles = current_market_state.last_consecutive_red_candle_count >=  *HAMMER_RED_CANDLES_COUNT_THRESHOLD;
             if hammer_after_red_candles{
                 println!("");
                 println!("-----*****-----");
-                println!("Hammer Candle found after continuous {} red candles", format!("{}",HAMMER_RED_CANDLES_COUNT_THRESHOLD).red());
+                println!("Hammer Candle found after continuous {} red candles", format!("{}", *HAMMER_RED_CANDLES_COUNT_THRESHOLD).red());
                 println!("{:?}", stock);
                 println!("-----*****-----");
                 println!("");
@@ -300,17 +301,17 @@ impl HammerPatternUtil {
         let (trade_position_type, entry_price, trade_sl, trade_target) = match previous_hammer_candle.is_green_candle {
             true => {
                 let lower_wick = previous_hammer_candle.open-previous_hammer_candle.low;
-                let entry_price = previous_hammer_candle.close-HAMMER_SL_MARGIN_POINTS;
-                let trade_sl = entry_price-(lower_wick+HAMMER_SL_MARGIN_POINTS);
-                let trade_target = entry_price+(lower_wick*HAMMER_TARGET_MARGIN_MULTIPLIER);
+                let entry_price = previous_hammer_candle.close-(*HAMMER_SL_MARGIN_POINTS);
+                let trade_sl = entry_price-(lower_wick+(*HAMMER_SL_MARGIN_POINTS));
+                let trade_target = entry_price+(lower_wick*(*HAMMER_TARGET_MARGIN_MULTIPLIER));
                 (TradeType::Long, entry_price, trade_sl, trade_target)
             }, //2 points below the close price can be a good entry point
                 // return_2_precision_for_float(previous_hammer_candle.close*0.95)), //95% of the close price can be a good entry point
             false => {
                 let lower_wick = previous_hammer_candle.close-previous_hammer_candle.low;
-                let entry_price = previous_hammer_candle.open-HAMMER_SL_MARGIN_POINTS;
-                let trade_sl = entry_price-(lower_wick+HAMMER_SL_MARGIN_POINTS);
-                let trade_target = entry_price+((lower_wick+HAMMER_SL_MARGIN_POINTS)*HAMMER_TARGET_MARGIN_MULTIPLIER);
+                let entry_price = previous_hammer_candle.open-(*HAMMER_SL_MARGIN_POINTS);
+                let trade_sl = entry_price-(lower_wick+(*HAMMER_SL_MARGIN_POINTS));
+                let trade_target = entry_price+((lower_wick+(*HAMMER_SL_MARGIN_POINTS))*(*HAMMER_TARGET_MARGIN_MULTIPLIER));
                 (TradeType::Long, entry_price, trade_sl, trade_target)
             }
                 // return_2_precision_for_float(previous_hammer_candle.open*0.95)) //95% of the open price can be a good entry point

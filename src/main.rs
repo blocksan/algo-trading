@@ -33,10 +33,59 @@ use std::error::Error;
 use tokio_tungstenite::connect_async;
 use url::Url;
 use std::time::Instant;
+use std::env;
+use dotenv;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
+        let temp = env::var("HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = {
+        let temp = env::var("HAMMER_RED_CANDLES_COUNT_THRESHOLD").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<i32>().unwrap()
+    };
+
+    static ref HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = {
+        let temp = env::var("HAMMER_MAX_DROP_THRESHOLD_VALUE").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_MAX_DROP_CANDLE_COUNT: usize = {
+        let temp = env::var("HAMMER_MAX_DROP_CANDLE_COUNT").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<usize>().unwrap()
+    };
+
+    static ref HAMMER_SL_MARGIN_POINTS: f32 = {
+        let temp = env::var("HAMMER_SL_MARGIN_POINTS").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_TARGET_MARGIN_MULTIPLIER:f32 = {
+        let temp = env::var("HAMMER_TARGET_MARGIN_MULTIPLIER").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+    
+}
 
 #[tokio::main]
 async fn main() {
+
+    
     let start_time = Instant::now();
+    let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| String::from("development"));
+    match environment.as_str() {
+        "production" => {
+            dotenv::from_filename(".env").ok();
+            println!("Using production environment variables");
+        }
+        _ => {
+            dotenv::from_filename(".env.dev").ok();
+            println!("Using development environment variables");
+        }
+    }
     let mongo_url = "mongodb://localhost:27017";
     let database_name = "algo_trading";
 
