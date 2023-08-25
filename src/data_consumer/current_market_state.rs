@@ -479,6 +479,39 @@ impl CurrentMarketState {
         }
     }
 
+    pub async fn api_fetch_previous_market_state(current_market_state_cache_key: &str, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
+        let redis_client = RedisClient::get_instance();
+        let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
+        let options = FindOneOptions::builder().build();
+        let previous_market_state = match redis_client.lock().unwrap().get_data(current_market_state_cache_key) {
+                    Ok(data) => {
+                        // println!("Data fetched from Redis for key => {}", current_market_state_cache_key);
+                        let deserialised_data = serde_json::from_str::<CurrentMarketState>(data.as_str()).unwrap();
+                        Some(deserialised_data)
+                    }
+                    Err(e) => {
+                        println!("Error while fetching the data from Redis => {:?}", e);
+                        //fetch from the mongodb
+                        None
+                    }
+        };
+        if previous_market_state.is_some(){
+            previous_market_state
+        }else{
+            match current_market_state_collection.find_one(filter, options).await {
+                Ok(Some(data)) => {
+                    // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
+                    Some(data)
+                },
+                Ok(None) => None,
+                Err(e) => {
+                    println!("Error while fetching the data from MongoDB => {:?}", e);
+                    None
+                }
+            }
+        }
+    }
+
     
 }
 
