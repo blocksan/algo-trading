@@ -6,6 +6,11 @@ edition = "2021"
 [[bin]]
 name = "socket_data_1min"
 path = "src/socket_data_1min.rs"
+
+[[bin]]
+name = "api_server"
+path = "src/api_server.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -28,3 +33,4 @@ url = "2.2.2"
 uuid = "1.4.1"
 colored = "2.0"
 dotenv = "0.15.0"
+actix-web = "4.3.1"
