@@ -6,7 +6,7 @@ pub mod trade_watcher;
 pub mod user;
 use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
-use data_consumer::{current_market_state::CurrentMarketState, support_resistance_fractol::find_support_resistance};
+use data_consumer::current_market_state::CurrentMarketState;
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
@@ -32,11 +32,60 @@ use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 use std::error::Error;
 use tokio_tungstenite::connect_async;
 use url::Url;
-use std::time::{Instant, Duration};
+use std::time::Instant;
+use std::env;
+use dotenv;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
+        let temp = env::var("HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = {
+        let temp = env::var("HAMMER_RED_CANDLES_COUNT_THRESHOLD").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<i32>().unwrap()
+    };
+
+    static ref HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = {
+        let temp = env::var("HAMMER_MAX_DROP_THRESHOLD_VALUE").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_MAX_DROP_CANDLE_COUNT: usize = {
+        let temp = env::var("HAMMER_MAX_DROP_CANDLE_COUNT").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<usize>().unwrap()
+    };
+
+    static ref HAMMER_SL_MARGIN_POINTS: f32 = {
+        let temp = env::var("HAMMER_SL_MARGIN_POINTS").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+
+    static ref HAMMER_TARGET_MARGIN_MULTIPLIER:f32 = {
+        let temp = env::var("HAMMER_TARGET_MARGIN_MULTIPLIER").unwrap_or_else(|_| String::from("0.0"));
+        temp.parse::<f32>().unwrap()
+    };
+    
+}
 
 #[tokio::main]
 async fn main() {
+
+    
     let start_time = Instant::now();
+    let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| String::from("development"));
+    match environment.as_str() {
+        "production" => {
+            dotenv::from_filename(".env").ok();
+            println!("Using production environment variables");
+        }
+        _ => {
+            dotenv::from_filename(".env.dev").ok();
+            println!("Using development environment variables");
+        }
+    }
     let mongo_url = "mongodb://localhost:27017";
     let database_name = "algo_trading";
 
@@ -107,32 +156,33 @@ async fn main() {
         .database(database_name)
         .collection::<CurrentPnLState>(current_pnl_state_collection_name);
 
-    pnl_state::CurrentPnLState::new_static_current_pnl_state(
-        current_pnl_state_collection.clone(),
-        pnl_configuration_collection.clone(),
-    )
-    .await;
+    // pnl_state::CurrentPnLState::new_static_current_pnl_state(
+    //     current_pnl_state_collection.clone(),
+    //     pnl_configuration_collection.clone(),
+    // )
+    // .await;
     //END -> add the current_pnl_state into the database
     let thread_worker_configs = vec![
-        // ThreadWorkerConfig {
-        //     thread_job_type: ThreadJobType::DataConsumerViaSocket,
-        //     time_frame: TimeFrame::OneMinute,
-        //     root_system_config: RootSystemConfig {
-        //         database_instance: db.clone(),
-        //         hammer_candle_collection: hammer_candle_collection.clone(),
-        //         hammer_ledger: hammer_ledger.clone(),
-        //         current_market_state_collection: current_market_state_collection.clone(),
-        //         orders_collection: orders_collection.clone(),
-        //         trade_signal_collection: trade_signal_collection.clone(),
-        //         user_collection: user_collection.clone(),
-        //         server_url: "ws://localhost:5554".to_string(),
-        //         tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
-        //         trade_keeper: trade_keeper.clone(),
-        //         order_manager: order_manager.clone(),
-        //         shared_order_ledger: shared_order_ledger.clone(),
-        //         current_pnl_state_collection: current_pnl_state_collection.clone(),
-        //     },
-        // }, //oneminute socket
+        ThreadWorkerConfig {
+            thread_job_type: ThreadJobType::DataConsumerViaSocket,
+            time_frame: TimeFrame::OneMinute,
+            root_system_config: RootSystemConfig {
+                database_instance: db.clone(),
+                hammer_candle_collection: hammer_candle_collection.clone(),
+                hammer_ledger: hammer_ledger.clone(),
+                current_market_state_collection: current_market_state_collection.clone(),
+                orders_collection: orders_collection.clone(),
+                trade_signal_collection: trade_signal_collection.clone(),
+                user_collection: user_collection.clone(),
+                server_url: "ws://localhost:5554".to_string(),
+                tradeable_algo_types: vec![AlgoTypes::HammerPatternAlgo],
+                trade_keeper: trade_keeper.clone(),
+                order_manager: order_manager.clone(),
+                shared_order_ledger: shared_order_ledger.clone(),
+                current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
+            },
+        }, //oneminute socket
         // ThreadWorkerConfig{
         //     server_url: "ws://localhost:5555".to_string(),
         //     time_frame: TimeFrame::ThreeMinutes
@@ -154,6 +204,7 @@ async fn main() {
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
                 current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
             },
         }, //fiveminute socket
         ThreadWorkerConfig {
@@ -173,6 +224,7 @@ async fn main() {
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
                 current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
             },
         }, // "ws://localhost:5556", //fiveminute socket
            // "ws://localhost:5557", //fifteenminute socket
@@ -214,7 +266,8 @@ async fn main() {
                 trade_keeper,
                 mut order_manager,
                 shared_order_ledger,
-                current_pnl_state_collection
+                current_pnl_state_collection,
+                pnl_configuration_collection    
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();
@@ -320,15 +373,22 @@ async fn main() {
                             match thread_worker_config.time_frame {
                                 TimeFrame::FiveMinutes => {
 
-                                    CurrentMarketState::calculate_market_state(
-                                        &raw_stock,
-                                        thread_worker_config.time_frame.clone(),
-                                        &current_market_state_collection,
-                                        redis_client.clone(),
-                                        &raw_stock_ledger,
-                                        database_instance.clone(),
-                                    )
-                                    .await;
+                                CurrentPnLState::new_static_current_pnl_state(
+                                    current_pnl_state_collection.clone(),
+                                    pnl_configuration_collection.clone(),
+                                    "64d8febebe3ea57f392c36df".to_owned(),
+                                    raw_stock.date.clone(),
+                                ).await;
+                                
+                                CurrentMarketState::calculate_market_state(
+                                    &raw_stock,
+                                    thread_worker_config.time_frame.clone(),
+                                    &current_market_state_collection,
+                                    redis_client.clone(),
+                                    &raw_stock_ledger,
+                                    database_instance.clone(),
+                                )
+                                .await;
     
                                 algo_dispatcher::ingest_raw_stock_data(
                                     &raw_stock,
@@ -342,17 +402,20 @@ async fn main() {
                                     redis_client.clone(),
                                     database_instance.clone(),
                                     user_collection.clone(),
-                                    &mut locked_shared_order_ledger
+                                    &mut locked_shared_order_ledger,
+                                    current_market_state_collection.clone(),
+                                    current_pnl_state_collection.clone()
                                 )
                                 .await;
+                            monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(),  current_pnl_state_collection.clone(),&mut locked_shared_order_ledger).await;
                                 drop(locked_shared_order_ledger);
                                 },
                                 TimeFrame::OneMinute =>{
-                                    println!();
-                                    println!("Received Stock: {:?} at Timeframe {}", message.to_text().unwrap(), thread_worker_config.time_frame );
-                                    println!();
+                                    // println!();
+                                    // println!("Received Stock: {:?} at Timeframe {}", message.to_text().unwrap(), thread_worker_config.time_frame );
+                                    // println!();
                                     
-                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(),  current_pnl_state_collection.clone(),&mut locked_shared_order_ledger).await;
+                                    monitor_trade::check_for_execute_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(),  current_pnl_state_collection.clone(),&mut locked_shared_order_ledger).await;
                                     // let temp = shared_order_ledger.lock().unwrap().clone();
                                     // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
                                     drop(locked_shared_order_ledger);
@@ -390,7 +453,7 @@ async fn main() {
     // for stock in stock_1_min_data.iter() {
     //     thread::sleep(time::Duration::from_secs(0));
     //     // hammer_ledger.calculate_and_add_ledger(stock);
-    //     check_for_exit_opportunity(&mut order_manager, stock.clone()); //TODO:: update to database too
+    //     check_for_execute_opportunity(&mut order_manager, stock.clone()); //TODO:: update to database too
     // }
     // println!("Order Manager => {:?}", order_manager.get_orders());
 

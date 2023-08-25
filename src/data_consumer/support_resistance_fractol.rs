@@ -1,9 +1,11 @@
+// use colored::*;
 use std::{thread, sync::{Arc, mpsc}};
-
 use crate::common::raw_stock::RawStock;
 
+const DIFFERENCE_THRESHOLD: f32 = 2.0;
 
 pub fn find_support_resistance(stocks: &Vec<RawStock>, pivot_depth: usize) -> (Vec<f32>, Vec<f32>){
+    // println!("{}","support & resistance".blue());
     let mut support = vec![];
     let mut resistance = vec![];
     let arc_stocks = Arc::new(stocks.clone());
@@ -35,12 +37,14 @@ pub fn find_support_resistance(stocks: &Vec<RawStock>, pivot_depth: usize) -> (V
 
         let current_stock = stocks[current_pivot_index].clone();
         if minima_receiver.recv().unwrap() {
-            println!("minima stock => {:?} value {:?}",current_stock.low, current_stock.date);
-            support.push(current_stock.low);
+            // println!("minima stock => {:?} value {:?}",current_stock.low, current_stock.date);
+            insert_if_difference_more_than_threshold(&mut support, current_stock.low, DIFFERENCE_THRESHOLD);
+            // support.push(current_stock.low);
         }
         if maxima_receiver.recv().unwrap() {
-            println!("maxima stock => {:?} value {:?}",current_stock.high, current_stock.date);
-            resistance.push(current_stock.high);
+            // println!("maxima stock => {:?} value {:?}",current_stock.high, current_stock.date);
+            insert_if_difference_more_than_threshold(&mut resistance, current_stock.high, DIFFERENCE_THRESHOLD);
+            // resistance.push(current_stock.high);
         }
         // if is_local_minima(pivot_depth, current_pivot_index,  &stocks, &current_stock) {
         //     println!("minima stock => {:?} value {:?}",current_stock.low, current_stock.date);
@@ -82,3 +86,23 @@ fn is_local_maxima(pivot_depth: usize, pivot_index: usize, stocks:Arc<Vec<RawSto
     }
     is_maxima
 }
+
+
+fn insert_if_difference_more_than_threshold(data: &mut Vec<f32>, new_value: f32, difference_threshold: f32) {
+    let mut should_insert = true;
+
+    for &value in data.iter() {
+        if (value - new_value).abs() <= difference_threshold {
+            should_insert = false;
+            break;
+        }
+    }
+
+    if should_insert {
+        data.push(new_value);
+    }
+}
+
+
+
+
