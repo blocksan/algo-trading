@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use std::{fmt, sync::Arc};
 
-use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self, pnl_state::CurrentPnLState}, user::user::User};
+use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self, pnl_state::{CurrentPnLState, PnLConfiguration}}, user::user::User};
 
 
 #[allow(dead_code)]
@@ -102,6 +102,7 @@ pub struct RootSystemConfig {
     pub orders_collection: Collection<Order>,
     pub trade_signal_collection: Collection<TradeSignal>,
     pub current_pnl_state_collection: Collection<CurrentPnLState>,
+    pub pnl_configuration_collection: Collection<PnLConfiguration>,
     pub user_collection: Collection<User>,
     pub server_url: String,
     pub tradeable_algo_types: Vec<AlgoTypes>,

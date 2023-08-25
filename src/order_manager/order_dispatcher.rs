@@ -193,11 +193,8 @@ impl OrderManager {
         let mut dispatched_orders: Vec<Order> = vec![];
         for user in users {
             
-            let trade_date_only =
-                date_parser::return_only_date_from_datetime(trade_signal.raw_stock.date.as_str());
-
             let (current_pnl_cache_key, current_pnl_cache_algo_types_key ) = CurrentPnLState::get_current_pnl_cache_key(
-                trade_date_only.as_str(),
+                trade_signal.raw_stock.date.as_str(),
                 &user.id.to_string(),
             );
 
@@ -233,11 +230,11 @@ impl OrderManager {
             .await;
 
             if order_exists {
-                // println!(
-                //     "Order already exists for {} with algo type {}",
-                //     trade_signal.raw_stock.symbol,
-                //     trade_signal.trade_algo_type.to_string()
-                // );
+                println!(
+                    "Order already exists for {} with algo type {}",
+                    trade_signal.raw_stock.symbol,
+                    trade_signal.trade_algo_type.to_string()
+                );
                 ()
             } else {
                 let order = Order::new(
@@ -281,9 +278,9 @@ impl OrderManager {
 
                 if !is_order_tradeable {
                     println!(
-                    "Order is not tradeable for {} with algo type {} as threshold values set were matched",
+                    "Order for symbol {} is not tradeable due to {}",
                     trade_signal.raw_stock.symbol,
-                    trade_signal.trade_algo_type.to_string()
+                    not_eligible_trading_reason,
                 );
                     return;
                 }

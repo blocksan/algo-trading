@@ -156,11 +156,11 @@ async fn main() {
         .database(database_name)
         .collection::<CurrentPnLState>(current_pnl_state_collection_name);
 
-    pnl_state::CurrentPnLState::new_static_current_pnl_state(
-        current_pnl_state_collection.clone(),
-        pnl_configuration_collection.clone(),
-    )
-    .await;
+    // pnl_state::CurrentPnLState::new_static_current_pnl_state(
+    //     current_pnl_state_collection.clone(),
+    //     pnl_configuration_collection.clone(),
+    // )
+    // .await;
     //END -> add the current_pnl_state into the database
     let thread_worker_configs = vec![
         ThreadWorkerConfig {
@@ -180,6 +180,7 @@ async fn main() {
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
                 current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
             },
         }, //oneminute socket
         // ThreadWorkerConfig{
@@ -203,6 +204,7 @@ async fn main() {
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
                 current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
             },
         }, //fiveminute socket
         ThreadWorkerConfig {
@@ -222,6 +224,7 @@ async fn main() {
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
                 current_pnl_state_collection: current_pnl_state_collection.clone(),
+                pnl_configuration_collection: pnl_configuration_collection.clone(),
             },
         }, // "ws://localhost:5556", //fiveminute socket
            // "ws://localhost:5557", //fifteenminute socket
@@ -263,7 +266,8 @@ async fn main() {
                 trade_keeper,
                 mut order_manager,
                 shared_order_ledger,
-                current_pnl_state_collection
+                current_pnl_state_collection,
+                pnl_configuration_collection    
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();
@@ -369,15 +373,22 @@ async fn main() {
                             match thread_worker_config.time_frame {
                                 TimeFrame::FiveMinutes => {
 
-                                    CurrentMarketState::calculate_market_state(
-                                        &raw_stock,
-                                        thread_worker_config.time_frame.clone(),
-                                        &current_market_state_collection,
-                                        redis_client.clone(),
-                                        &raw_stock_ledger,
-                                        database_instance.clone(),
-                                    )
-                                    .await;
+                                CurrentPnLState::new_static_current_pnl_state(
+                                    current_pnl_state_collection.clone(),
+                                    pnl_configuration_collection.clone(),
+                                    "64d8febebe3ea57f392c36df".to_owned(),
+                                    raw_stock.date.clone(),
+                                ).await;
+                                
+                                CurrentMarketState::calculate_market_state(
+                                    &raw_stock,
+                                    thread_worker_config.time_frame.clone(),
+                                    &current_market_state_collection,
+                                    redis_client.clone(),
+                                    &raw_stock_ledger,
+                                    database_instance.clone(),
+                                )
+                                .await;
     
                                 algo_dispatcher::ingest_raw_stock_data(
                                     &raw_stock,
