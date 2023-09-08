@@ -4,13 +4,14 @@ pub mod data_consumer;
 pub mod order_manager;
 pub mod trade_watcher;
 pub mod user;
+pub mod api;
+pub mod config;
 
-use std::{env, time::Instant};
+use std::env;
+use api::routes::routes_config;
+use api::utils::app_state::AppState;
 use lazy_static::lazy_static;
-use mongodb::bson::oid::ObjectId;
-use mongodb::{options::ClientOptions, Client, Collection};
-use serde::Serialize;
-use serde::Deserialize;
+use config::mongodb_connection;
 lazy_static! {
     static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
         let temp = env::var("HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE").unwrap_or_else(|_| String::from("0.0"));
@@ -44,83 +45,9 @@ lazy_static! {
     
 }
 
-use actix_web::{get, post, App, HttpResponse, HttpServer, Responder, web};
-use order_manager::{
-    order_dispatcher,
-    pnl_state::{self, CurrentPnLState, PnLConfiguration},
-    trade_signal_keeper::{self, TradeSignal},
-};
+use actix_web::{ App, HttpServer, web};
 
 use crate::data_consumer::current_market_state::CurrentMarketState;
-
-#[get("/hello")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello, world!")
-}
-
-#[derive(Serialize)]
-struct MyObj {
-    name: String,
-}
-
-#[post("/fetch_current_pnl")]
-async fn fetch_current_pnl() -> impl Responder {
-    let current_cache_key = "CPnL_2022_10_18_64d8febebe3ea57f392c36df";
-    let only_redis = true;
-   let current_pnl_state_option = CurrentPnLState::fetch_current_pnl_state(current_cache_key, only_redis);
-   
-   if current_pnl_state_option.is_some(){
-        let current_pnl_state = current_pnl_state_option.unwrap();
-       HttpResponse::Ok().json(current_pnl_state)
-   }else{
-       HttpResponse::Ok().body("No Pnl")
-   }
-}
-
-#[derive(Deserialize, Debug)]
-struct CurrentMarketStateBodyParams{
-    current_market_cache_key: String,
-}
-
-#[post("/fetch_current_market_state")]
-async fn fetch_current_market_state(app_state: web::Data<AppState>, body: web::Json<CurrentMarketStateBodyParams>) -> impl Responder {
-    println!("body: {:?}", body);
-    let current_cache_key = body.current_market_cache_key.clone();
-    let current_market_state_collection = &app_state.current_market_state_collection;
-   let current_market_state_option = CurrentMarketState::api_fetch_previous_market_state(current_cache_key.as_str(), current_market_state_collection).await;
-   
-   if current_market_state_option.is_some(){
-        let current_market_state = current_market_state_option.unwrap();
-       HttpResponse::Ok().json(current_market_state)
-   }else{
-       HttpResponse::Ok().body("No Pnl")
-   }
-}
-
-#[derive(Deserialize, Debug)]
-struct FetchOrdersBodyParams{
-    user_id: String,
-}
-
-#[post("/fetch_orders")]
-async fn fetch_orders(app_state: web::Data<AppState>, body: web::Json<FetchOrdersBodyParams>) -> impl Responder {
-    println!("body: {:?}", body);
-    let current_cache_key = body.user_id.clone();
-    let current_market_state_collection = &app_state.current_market_state_collection;
-   let current_market_state_option = CurrentMarketState::api_fetch_previous_market_state(current_cache_key.as_str(), current_market_state_collection).await;
-   
-   if current_market_state_option.is_some(){
-        let current_market_state = current_market_state_option.unwrap();
-       HttpResponse::Ok().json(current_market_state)
-   }else{
-       HttpResponse::Ok().body("No Pnl")
-   }
-}
-
-
-struct AppState{
-    current_market_state_collection: Collection<CurrentMarketState>,
-}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -136,16 +63,16 @@ async fn main() -> std::io::Result<()> {
             println!("Using development environment variables");
         }
     }
-    let mongo_url = "mongodb://localhost:27017";
-    let database_name = "algo_trading";
+    // let mongo_url = "mongodb://localhost:27017";
+    // let database_name = "algo_trading";
 
-    let client_options = ClientOptions::parse(mongo_url).await.unwrap();
-    let client = Client::with_options(client_options).unwrap();
+    // let client_options = ClientOptions::parse(mongo_url).await.unwrap();
+    // let client = Client::with_options(client_options).unwrap();
 
-    let db = client.database(database_name);
+    // let db = client.database(database_name);
 
     let current_market_state_collection_name = "current_market_states";
-    let current_market_state_collection =db.collection::<CurrentMarketState>(current_market_state_collection_name);
+    let current_market_state_collection =mongodb_connection::fetch_db_connection().await.collection::<CurrentMarketState>(current_market_state_collection_name);
 
 
     HttpServer::new(move || {
@@ -153,9 +80,9 @@ async fn main() -> std::io::Result<()> {
         .app_data(web::Data::new(AppState{
             current_market_state_collection: current_market_state_collection.clone(),
         }))
-        .service(hello)
-        .service(fetch_current_pnl)
-        .service(fetch_current_market_state)
+        .configure(|cfg| {
+            routes_config(cfg);
+        })
         })
         .bind("127.0.0.1:8090")?
         .run()

@@ -1,7 +1,7 @@
 use super::trade_signal_keeper::TradeSignal;
 use crate::{
     common::{
-        date_parser::{self, new_current_date_time_in_desired_stock_datetime_format},
+        date_parser::new_current_date_time_in_desired_stock_datetime_format,
         enums::{AlgoTypes, TradeType},
         raw_stock::RawStock,
         redis_client::RedisClient,

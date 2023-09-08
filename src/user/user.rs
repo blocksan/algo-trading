@@ -1,6 +1,8 @@
 use mongodb::{Collection, bson::{doc, oid::ObjectId}};
 use serde::{Deserialize, Serialize};
 use futures::TryStreamExt;
+use crate::{config::mongodb_connection, common::date_parser};
+// fetch_db_connection
 #[allow(dead_code)]
 #[derive(Debug,Clone, Serialize, Deserialize)]
 pub struct User {
@@ -116,6 +118,71 @@ impl User {
         }else{
             users.unwrap()
         }
+    }
+
+
+
+    pub async fn add_new_user_via_db(name: String, email: String, password: String){
+        let new_user = User::new(
+            ObjectId::new(),
+            name,
+            email,
+            password,
+            date_parser::new_current_date_time_in_desired_stock_datetime_format(),
+        date_parser::new_current_date_time_in_desired_stock_datetime_format(),
+            true,
+        );
+
+        let user_collection = User::get_user_collection().await;
+
+        let existing_user = User::get_user_by_email(&new_user.email, user_collection.clone()).await;
+
+        if existing_user.is_some() {
+            println!("User already exists");
+            return;
+        }
+
+        match user_collection.insert_one(new_user.clone(), None).await {
+            Ok(_) => {
+                println!("Successfully inserted new User into the collection");
+            },
+            Err(e) => {
+                println!("Error while inserting new User into the collection due to error {:?}",e);
+            }
+        }
+        
+    }
+
+    pub async fn get_user_by_email_via_db(email: String) -> Option<User> {
+        let user_collection = User::get_user_collection().await;
+
+        let filter = doc! { "email": email.clone() };
+        match user_collection.find_one(filter, None).await {
+            Ok(user) => {
+                match user {
+                    Some(user) => {
+                        println!("User found {:?}", user);
+                        Some(user)
+                    },
+                    None => {
+                        println!("User not found");
+                        None
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Error while finding user due to error {:?}", e);
+                None
+            }
+        }
+    }
+
+    
+    pub async fn get_user_collection() -> Collection<User>{
+        let db = mongodb_connection::fetch_db_connection().await;
+        let user_collection_name = "users";
+        let user_collection = db.collection::<User>(user_collection_name);
+        return user_collection
     }
 
 }

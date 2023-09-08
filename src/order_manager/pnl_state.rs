@@ -9,12 +9,12 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::common::{
+use crate::{common::{
     date_parser::{self, new_current_date_time_in_desired_stock_datetime_format},
     enums::AlgoTypes,
     redis_client::RedisClient,
     utils,
-};
+}, config::mongodb_connection};
 
 use super::order_dispatcher::Order;
 
@@ -501,6 +501,69 @@ impl PnLConfiguration {
 
     //TODO: set the config from UI and save it in DB for the logged in user
     pub async fn new_static_config(pnl_configuration_collection: Collection<PnLConfiguration>) {
+        let created_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
+        let updated_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
+        //TODO: remove static date once live market data is available
+        let start_trade_date = DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z")
+            .unwrap()
+            .to_string();
+
+        //TODO: remove static date once live market data is available
+        let end_trade_date = DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z")
+            .unwrap()
+            .to_string();
+        let max_trade_count = 5;
+        let symbols = vec!["ADANIGREEN".to_string()];
+        let trading_algo_types = vec![AlgoTypes::HammerPatternAlgo];
+        let max_sl_hit_count = 2;
+        let targeted_pnl = 1000.0;
+        let targeted_pnl_percentage = 10.0;
+        let max_target_hit_count = 4;
+        let max_sl_capacity = -500.0;
+        let max_trade_capital = 4000000.0;
+        let user_id = ObjectId::from_str("64d8febebe3ea57f392c36df").unwrap();
+        let id = ObjectId::new();
+        let new_pnl_configuration = PnLConfiguration::new(
+            created_at,
+            updated_at,
+            start_trade_date,
+            end_trade_date,
+            max_trade_count,
+            symbols,
+            trading_algo_types,
+            max_sl_hit_count,
+            targeted_pnl,
+            targeted_pnl_percentage,
+            max_target_hit_count,
+            max_sl_capacity,
+            max_trade_capital,
+            true,
+            user_id,
+            id,
+        );
+
+        match pnl_configuration_collection
+            .insert_one(new_pnl_configuration, None)
+            .await
+        {
+            Ok(_) => {
+                println!("Successfully inserted new PnL configuration");
+            }
+            Err(e) => {
+                println!("Error while inserting new PnL configuration: {}", e);
+            }
+        }
+    }
+
+    pub async fn get_pnl_configuration_collection() -> Collection<PnLConfiguration>{
+        let db = mongodb_connection::fetch_db_connection().await;
+        let pnl_configuration_collection_name = "pnl_configurations";
+        let pnl_configuration_collection = db.collection::<PnLConfiguration>(pnl_configuration_collection_name);
+        return pnl_configuration_collection
+    }
+
+    pub async fn new_pnl_static_config_via_db() {
+        let pnl_configuration_collection = Self::get_pnl_configuration_collection().await;
         let created_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         let updated_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         //TODO: remove static date once live market data is available

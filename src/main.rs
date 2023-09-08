@@ -4,6 +4,8 @@ pub mod data_consumer;
 pub mod order_manager;
 pub mod trade_watcher;
 pub mod user;
+pub mod config;
+
 use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
 use data_consumer::current_market_state::CurrentMarketState;
