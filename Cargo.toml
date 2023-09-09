@@ -11,6 +11,10 @@ path = "src/socket_data_1min.rs"
 name = "api_server"
 path = "src/api_server.rs"
 
+[[bin]]
+name = "data_dump"
+path = "src/data_dump_script.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

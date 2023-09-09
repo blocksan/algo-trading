@@ -58,6 +58,7 @@ pub enum TimeFrame{
     ThreeMinutes,
     FiveMinutes,
     FifteenMinutes,
+    SixtyMinutes,
     OneDay,
     OneWeek,
     OneMonth,

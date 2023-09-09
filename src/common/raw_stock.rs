@@ -15,6 +15,17 @@ pub struct RawStock {
     pub market_time_frame: TimeFrame
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[allow(dead_code, unused_variables)]
+pub struct RawStockFromFile {
+    pub date: String,
+    pub close: f32,
+    pub high: f32,
+    pub low: f32,
+    pub open: f32,
+    pub volume: i32
+}
+
 #[allow(dead_code, unused_variables)]
 impl RawStock{
     pub fn new(symbol: String, date: String, close: f32, high: f32, low: f32, open: f32, volume: i32, market_time_frame: TimeFrame) -> RawStock {
