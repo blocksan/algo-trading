@@ -1,4 +1,7 @@
 use colored::*;
+use mongodb::bson::doc;
+use mongodb::options::FindOptions;
+use crate::config::mongodb_connection;
 use crate::{HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE, HAMMER_RED_CANDLES_COUNT_THRESHOLD, HAMMER_MAX_DROP_THRESHOLD_VALUE, HAMMER_MAX_DROP_CANDLE_COUNT, HAMMER_SL_MARGIN_POINTS, HAMMER_TARGET_MARGIN_MULTIPLIER};
 use crate::common::enums::{AlgoTypes, TradeType, TimeFrame};
 use crate::common::raw_stock::RawStock;
@@ -11,12 +14,24 @@ use crate::order_manager::trade_signal_keeper::TradeSignal;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
+use futures::TryStreamExt;
 // const HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = 0.0025; //0.25% as a fraction
 // const HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = 3;
 // const HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = 20.0; //TODO: configure these values based on the index or stocks
 // const HAMMER_MAX_DROP_CANDLE_COUNT: usize = 2;
 // const HAMMER_SL_MARGIN_POINTS : f32 = 1.0; //2 points
 // const HAMMER_TARGET_MARGIN_MULTIPLIER : f32 = 1.5; //1.5 times of the lower wick
+
+#[derive(Deserialize, Debug)]
+pub struct HammerCandleBodyParams{
+    pub start_trade_date: String,
+    pub end_trade_date: String,
+    pub symbol: Option<String>,
+    pub market_time_frame: Option<TimeFrame>,
+    pub is_green_candle: Option<bool>,
+    pub volume: Option<i32>,
+    pub volume_operator: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HammerCandle {
@@ -80,6 +95,78 @@ impl HammerCandle {
     pub fn update_is_green_candle(&mut self, is_green_candle: bool) {
         self.is_green_candle = is_green_candle;
     }
+
+    pub async fn fetch_hammer_candles(hammer_candles_body_params: HammerCandleBodyParams) -> Option<Vec<HammerCandle>>{
+        let hammer_collection = HammerCandle::get_hammer_candles_collection().await; 
+        let HammerCandleBodyParams {
+            start_trade_date,
+            end_trade_date,
+            symbol,
+            is_green_candle,
+            market_time_frame,
+            volume,
+            volume_operator
+        } = hammer_candles_body_params;
+        let mut filter = doc! {
+            "date": {
+                "$gte": start_trade_date,
+                "$lte": end_trade_date
+            },
+        }; 
+
+        if is_green_candle.is_some() {
+            filter.insert("is_green_candle", is_green_candle.unwrap());
+        }
+    
+        if market_time_frame.is_some() {
+            filter.insert("market_time_frame", market_time_frame.unwrap().to_string());
+        }
+
+        if volume.is_some() {
+            if volume_operator.is_some() && volume_operator.unwrap() == "$gte"{
+                filter.insert( "volume", doc!{
+                    "$gte": volume.unwrap()
+                });
+            }else {
+                filter.insert( "volume", doc!{
+                    "$lte": volume.unwrap()
+                });
+            }
+        }
+
+        if symbol.is_some() {
+            filter.insert("symbol", symbol.unwrap());
+        }
+
+        let options = FindOptions::builder().build();
+
+        // let cursor = pnl_configuration_collection.find(filter, options).await?.try_collect::<Vec<_>>().await?;
+        let cursor = hammer_collection.find(filter, options).await;
+        match cursor {
+            Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
+                Ok(data) => {
+                    // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    Some(data) 
+                }
+                Err(e) => {
+                    println!("Cursor Error fetch_hammer_candles: {}", e);
+                    None
+                }
+            },
+            Err(e) => {
+                println!("Error fetch_hammer_candles: {}", e);
+                None
+            }
+        }
+    }
+
+    pub async fn get_hammer_candles_collection() -> Collection<HammerCandle>{
+        let db = mongodb_connection::fetch_db_connection().await;
+        let hammer_candle_collection_name = "hammer_candles";
+        let hammer_candle_collection = db.collection::<HammerCandle>(hammer_candle_collection_name);
+        return hammer_candle_collection
+    }
+
 
     
 }

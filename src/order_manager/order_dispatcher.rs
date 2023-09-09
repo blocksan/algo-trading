@@ -8,16 +8,32 @@ use crate::{
         utils::{self},
     },
     order_manager::pnl_state::CurrentPnLState,
-    user::user::User,
+    user::user::User, config::mongodb_connection,
 };
 use mongodb::{
     bson::{doc, oid::ObjectId, Document},
-    options::{FindOneOptions, UpdateOptions},
+    options::{FindOneOptions, UpdateOptions, FindOptions},
     Collection,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt, sync::Mutex, vec};
+use std::{fmt, sync::Mutex, vec, str::FromStr};
 use uuid::Uuid;
+use futures::TryStreamExt;
+
+
+#[derive(Deserialize, Debug)]
+pub struct OrderBodyParams{
+    pub start_trade_date: String,
+    pub end_trade_date: Option<String>,
+    pub user_id: String,
+    pub trade_position_type: Option<TradeType>,
+    pub trade_algo_type: Option<AlgoTypes>,
+    pub is_trade_open: Option<bool>,
+    pub is_profitable_trade: Option<bool>,
+    pub total_price: Option<f32>,
+    pub total_price_operator: Option<String>,
+    pub symbol: Option<String>,
+}
 
 // #[derive(Debug, Clone, PartialEq)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -355,8 +371,80 @@ impl OrderManager {
         drop(shared_order_ledger);
     }
 
-    pub fn get_orders(&self) -> &Vec<Order> {
-        &self.orders
+    pub async fn fetch_orders(order_params: OrderBodyParams) -> Option<Vec<Order>> {
+        let OrderBodyParams {
+            start_trade_date,
+            end_trade_date,
+            user_id,
+            trade_position_type,
+            trade_algo_type,
+            is_trade_open,
+            is_profitable_trade,
+            total_price,
+            symbol,
+            total_price_operator
+        } = order_params;
+        let mut filter = doc! {
+            "user_id": ObjectId::from_str(user_id.as_str()).unwrap(),
+            "order_placed_at": {
+                "$gte": start_trade_date,
+                "$lte": end_trade_date.unwrap_or(new_current_date_time_in_desired_stock_datetime_format())
+            },
+        }; 
+
+        if trade_position_type.is_some() {
+            filter.insert("trade_position_type", trade_position_type.unwrap().to_string());
+        }
+
+        if trade_algo_type.is_some() {
+            filter.insert("trade_algo_type", trade_algo_type.unwrap().to_string());
+        }
+
+        if is_trade_open.is_some() {
+            filter.insert("is_trade_open", is_trade_open.unwrap());
+        }
+
+        if is_profitable_trade.is_some() {
+            filter.insert("is_profitable_trade", is_profitable_trade.unwrap());
+        }
+
+        if total_price.is_some() {
+            if total_price_operator.is_some() && total_price_operator.unwrap() == "$gte"{
+                filter.insert( "total_price", doc!{
+                    "$gte": total_price
+                });
+            }else {
+                filter.insert( "total_price", doc!{
+                    "$lte": total_price
+                });
+            }
+        }
+
+        if symbol.is_some() {
+            filter.insert("symbol", symbol.unwrap());
+        }
+
+        let options = FindOptions::builder().build();
+        let order_collection = OrderManager::get_order_collection().await;
+
+        // let cursor = pnl_configuration_collection.find(filter, options).await?.try_collect::<Vec<_>>().await?;
+        let cursor = order_collection.find(filter, options).await;
+        match cursor {
+            Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
+                Ok(data) => {
+                    // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    Some(data) 
+                }
+                Err(e) => {
+                    println!("Cursor Error fetch_orders: {}", e);
+                    None
+                }
+            },
+            Err(e) => {
+                println!("Error fetch_orders: {}", e);
+                None
+            }
+        }
     }
 
     async fn check_if_open_order_exists(
@@ -650,5 +738,12 @@ impl OrderManager {
                 (false, None, "Unknown reason".to_string())
             }
         }
+    }
+
+    pub async fn get_order_collection() -> Collection<Order>{
+        let db = mongodb_connection::fetch_db_connection().await;
+        let order_collection_name = "orders";
+        let order_collection = db.collection::<Order>(order_collection_name);
+        return order_collection
     }
 }

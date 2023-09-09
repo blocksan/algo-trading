@@ -1,9 +1,19 @@
-use mongodb::{Collection, bson::oid::ObjectId};
+use mongodb::{Collection, bson::{oid::ObjectId, doc}, options::FindOptions};
 
-use crate::common::{raw_stock::RawStock, enums::{AlgoTypes, TradeType, TimeFrame}, date_parser};
+use crate::{common::{raw_stock::RawStock, enums::{AlgoTypes, TradeType, TimeFrame}, date_parser}, config::mongodb_connection};
 use serde::{Deserialize, Serialize};
+use futures::TryStreamExt;
 
 const QTY:i32 = 10;
+
+#[derive(Deserialize, Debug)]
+pub struct TradeSignalBodyParams{
+    pub start_trade_date: String,
+    pub end_trade_date: String,
+    pub trade_position_type: Option<TradeType>,
+    pub trade_algo_type: Option<AlgoTypes>,
+    pub symbol: Option<String>,
+}
 
 #[allow(dead_code, unused_variables)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,6 +87,64 @@ impl TradeSignal{
         );
         Some(trade_signal)
     }
+
+    pub async fn fetch_trade_signals(fetch_trade_signals_params: TradeSignalBodyParams) -> Option<Vec<TradeSignal>> {
+        let TradeSignalBodyParams {
+            start_trade_date,
+            end_trade_date,
+            trade_position_type,
+            trade_algo_type,
+            symbol,
+        } = fetch_trade_signals_params;
+        let mut filter = doc! {
+            "created_at": {
+                "$gte": start_trade_date,
+                "$lte": end_trade_date
+            },
+        }; 
+
+        if trade_position_type.is_some() {
+            filter.insert("trade_position_type", trade_position_type.unwrap().to_string());
+        }
+
+        if trade_algo_type.is_some() {
+            filter.insert("trade_algo_type", trade_algo_type.unwrap().to_string());
+        }
+
+        if symbol.is_some() {
+            filter.insert("raw_stock.symbol", symbol.unwrap());
+        }
+
+        let options = FindOptions::builder().build();
+        let trade_signal_collection = TradeSignal::get_trade_signal_collection().await;
+
+        // let cursor = pnl_configuration_collection.find(filter, options).await?.try_collect::<Vec<_>>().await?;
+        let cursor = trade_signal_collection.find(filter, options).await;
+        match cursor {
+            Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
+                Ok(data) => {
+                    // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    Some(data) 
+                }
+                Err(e) => {
+                    println!("Cursor Error fetch_trade_signals:  {}", e);
+                    None
+                }
+            },
+            Err(e) => {
+                println!("Error fetch_trade_signals: {}", e);
+                None
+            }
+        }
+    }
+
+    pub async fn get_trade_signal_collection() -> Collection<TradeSignal> {
+        let db = mongodb_connection::fetch_db_connection().await;
+        let trade_signal_collection_name = "trade_signals";
+        let trade_signal_collection = db.collection::<TradeSignal>(trade_signal_collection_name);
+        trade_signal_collection
+    }
+
 }
 
 #[derive(Debug, Clone, Default)]

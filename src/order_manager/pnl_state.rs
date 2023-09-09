@@ -4,7 +4,7 @@ use chrono::DateTime;
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, oid::ObjectId, Document},
-    options::{FindOptions, UpdateOptions},
+    options::{FindOptions, UpdateOptions, FindOneOptions},
     Collection,
 };
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,14 @@ use crate::{common::{
 use super::order_dispatcher::Order;
 
 pub const CURRENT_STOCK_DATE: &str = "2022-10-22 09:40:00+05:30";
+
+#[derive(Deserialize, Debug)]
+pub struct CurrentPnLStateBodyParams{
+    pub start_trade_date: String,
+    pub end_trade_date: Option<String>,
+    pub user_id: String
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentPnLState {
@@ -118,7 +126,7 @@ impl CurrentPnLState {
             Self::get_current_pnl_cache_key(trading_date.clone().as_str(), user_id.as_str());
 
         let current_pnl_state_option =
-            Self::fetch_current_pnl_state(current_pnl_cache_key.as_str(), true);
+            Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), true).await;
 
         if current_pnl_state_option.is_some() {
             return ();
@@ -225,7 +233,7 @@ impl CurrentPnLState {
 
     }
 
-    pub fn fetch_current_pnl_state(
+    pub async fn fetch_current_pnl_state_via_cache_key(
         current_pnl_cache_key: &str,
         only_via_redis: bool,
     ) -> Option<CurrentPnLState> {
@@ -247,10 +255,76 @@ impl CurrentPnLState {
         if only_via_redis {
             current_pnl
         } else {
-            //TODO: fetch from mongodb
-            None
+                let current_pnl_state_collection = Self::get_current_pnl_state_collection().await;
+                let filter = doc! {"current_pnl_state_cache_key": current_pnl_cache_key.clone() };
+                let options = FindOneOptions::builder().build();
+                match current_pnl_state_collection.find_one(filter, options).await {
+                    Ok(Some(data)) => {
+                        // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
+                        Some(data)
+                    },
+                    Ok(None) => None,
+                    Err(e) => {
+                        println!("Error while fetching current_pnl_state from MongoDB => {:?}", e);
+                        None
+                    }
+                }
         }
     }
+
+    pub async fn fetch_current_pnl_state(
+        current_pnl_state_patams: CurrentPnLStateBodyParams,
+        only_via_redis: bool,
+    ) -> Option<Vec<CurrentPnLState>> {
+        let CurrentPnLStateBodyParams {user_id, start_trade_date, end_trade_date}  = current_pnl_state_patams;
+
+        if end_trade_date.is_some(){
+            println!("fetch_current_pnl_state => end_trade_date is {:?}", end_trade_date);
+            let current_pnl_state_collection = Self::get_current_pnl_state_collection().await;
+            // Parse the date strings into BSON datetime objects
+            // let parsed_trade_date = parse_date_in_stock_format(trade_date.as_str(), true ).unwrap();
+            // let start_date_time = Bson::DateTime(parsed_trade_date.parse().unwrap());
+            // let end_date_time = Bson::DateTime(end_trade_date);
+
+            let filter = doc! {
+                "start_trade_date": {
+                    "$gte": start_trade_date,
+                    "$lte": end_trade_date
+                }
+            };
+            let options = FindOptions::builder().build();
+            let cursor = current_pnl_state_collection.find(filter, options).await;
+            let mut current_pnl_states: Option<Vec<CurrentPnLState>> = None;
+            match cursor {
+                Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
+                    Ok(data) => {
+                        current_pnl_states = Some(data); //TODO: for each configuration against a user, create a new current pnl state against it.
+                        // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    }
+                    Err(e) => {
+                        println!("Curson Error while fetching current PnL states: {}", e);
+                    }
+                },
+                Err(e) => {
+                    println!("Error while fetching current PnL states: {}", e);
+                }
+            }
+        current_pnl_states
+        }else{
+            let (current_pnl_cache_key,_ ) =
+            Self::get_current_pnl_cache_key(start_trade_date.as_str(), user_id.to_string().as_str());
+            let current_pnl_state = Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), only_via_redis).await;
+            if current_pnl_state.is_some(){
+                let current_pnl_state = current_pnl_state.unwrap();
+                Some(vec![current_pnl_state])
+            }else{
+                None
+            }
+            
+        }
+
+    }
+    
 
     pub async fn update_current_pnl_state_via_order(
         close_order: &Order,
@@ -260,7 +334,7 @@ impl CurrentPnLState {
             Self::get_current_pnl_cache_key(close_order.raw_stock.date.as_str(), close_order.user_id.to_string().as_str());
 
         let current_pnl_state_option =
-            Self::fetch_current_pnl_state(current_pnl_cache_key.as_str(), true);
+            Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), true).await;
 
         if current_pnl_state_option.is_none() {
             println!("update_current_pnl_state_via_order => No current PnL state found {}", current_pnl_cache_key.as_str());
@@ -401,6 +475,12 @@ impl CurrentPnLState {
         }
     }
 
+    pub async fn get_current_pnl_state_collection() -> Collection<CurrentPnLState>{
+        let db = mongodb_connection::fetch_db_connection().await;
+        let current_pnl_state_collection_name = "current_pnl_states";
+        let current_pnl_state_collection = db.collection::<CurrentPnLState>(current_pnl_state_collection_name);
+        return current_pnl_state_collection
+    }
 
     fn to_document(&self) -> Document {
         let trading_algo_types_doc = self.trading_algo_types.iter().map(|algo_type| algo_type.to_string()).collect::<Vec<String>>();
@@ -618,6 +698,33 @@ impl PnLConfiguration {
         }
     }
 
+    pub async fn fetch_current_pnl_configuration(user_id: String) -> Option<Vec<PnLConfiguration>>{
+        let pnl_configuration_collection = Self::get_pnl_configuration_collection().await;
+        let filter = doc! {
+            "user_id": ObjectId::from_str(user_id.as_str()).unwrap(),
+            "is_active": true,
+        }; 
+        let options = FindOptions::builder().build();
+
+        // let cursor = pnl_configuration_collection.find(filter, options).await?.try_collect::<Vec<_>>().await?;
+        let cursor = pnl_configuration_collection.find(filter, options).await;
+        match cursor {
+            Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
+                Ok(data) => {
+                    // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    Some(data) 
+                }
+                Err(e) => {
+                    println!("No PnL configuration found: {}", e);
+                    None
+                }
+            },
+            Err(e) => {
+                println!("Error while fetching PnL configuration: {}", e);
+                None
+            }
+        }
+    }
     //this function will run via the cron against all the user and corresponding dates
     // pub fn fetch_pnl_configuration(
     //     pnl_configuration_collection: &Collection<PnLConfiguration>,

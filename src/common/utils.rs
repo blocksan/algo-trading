@@ -9,10 +9,10 @@ pub fn current_market_state_cache_key_formatter(trade_date_only: &str, symbol: &
     format!("{}_{}_{}_{}","CMS" , trade_date_only, symbol, market_time_frame)
 }
 
-pub fn current_pnl_state_cache_key_formatted(trade_date_only: &str, logged_in_user: &str) -> String {
-    format!("{}_{}_{}","CPnL" , trade_date_only, logged_in_user)
+pub fn current_pnl_state_cache_key_formatted(trade_date_only: &str, user_id: &str) -> String {
+    format!("{}_{}_{}","CPnL" , trade_date_only, user_id)
 }
 
-pub fn current_pnl_state_cache_key_algotypes_formatted(trade_date_only: &str, logged_in_user: &str) -> String {
-    format!("{}_{}_{}","CPnL_AlgoTypes_" , trade_date_only, logged_in_user)
+pub fn current_pnl_state_cache_key_algotypes_formatted(trade_date_only: &str, user_id: &str) -> String {
+    format!("{}_{}_{}","CPnL_AlgoTypes_" , trade_date_only, user_id)
 }

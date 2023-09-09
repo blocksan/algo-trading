@@ -1,11 +1,19 @@
 use colored::*;
 use std::sync::Mutex;
-use crate::common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter};
+use crate::{common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter}, config::mongodb_connection};
 use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
 use serde::{Deserialize, Serialize};
 
 use super::support_resistance_fractol::find_support_resistance;
 const PIVOT_DEPTH: usize = 3; //4 pivot depth means 3 candle left side and 3 candle right side
+
+#[derive(Deserialize, Debug)]
+pub struct CurrentMarketStateBodyParams{
+    pub symbol: String,
+    pub trade_date: String,
+    pub time_frame: TimeFrame
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CurrentMarketState {
 
@@ -479,25 +487,33 @@ impl CurrentMarketState {
         }
     }
 
-    pub async fn api_fetch_previous_market_state(current_market_state_cache_key: &str, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
+    pub async fn fetch_current_market_states(current_market_state_body_params: CurrentMarketStateBodyParams, only_via_redis: bool)->Option<CurrentMarketState>{
+        // current_market_state_cache_key: &str,
+        let CurrentMarketStateBodyParams{trade_date, symbol, time_frame} = current_market_state_body_params;
+        
+        let trade_date_only = date_parser::return_only_date_from_datetime(trade_date.as_str());
+        let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), symbol.as_str(), &time_frame);
+        let current_market_state_collection = Self::get_current_market_state_collection().await;
         let redis_client = RedisClient::get_instance();
-        let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
-        let options = FindOneOptions::builder().build();
-        let previous_market_state = match redis_client.lock().unwrap().get_data(current_market_state_cache_key) {
+        let previous_market_state = match redis_client.lock().unwrap().get_data(current_market_state_cache_key.as_str()) {
                     Ok(data) => {
                         // println!("Data fetched from Redis for key => {}", current_market_state_cache_key);
                         let deserialised_data = serde_json::from_str::<CurrentMarketState>(data.as_str()).unwrap();
                         Some(deserialised_data)
                     }
                     Err(e) => {
-                        println!("Error while fetching the data from Redis => {:?}", e);
+                        println!("Error while fetching the fetch_current_market_states from Redis => {:?}", e);
                         //fetch from the mongodb
                         None
                     }
         };
         if previous_market_state.is_some(){
             previous_market_state
+        }else if only_via_redis && previous_market_state.is_none() {
+            None
         }else{
+            let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
+            let options = FindOneOptions::builder().build();
             match current_market_state_collection.find_one(filter, options).await {
                 Ok(Some(data)) => {
                     // println!("Data fetched from current_market_stats for key => {}", current_market_state_cache_key);
@@ -505,11 +521,18 @@ impl CurrentMarketState {
                 },
                 Ok(None) => None,
                 Err(e) => {
-                    println!("Error while fetching the data from MongoDB => {:?}", e);
+                    println!("Error while fetching fetch_current_market_states from MongoDB => {:?}", e);
                     None
                 }
             }
         }
+    }
+
+    pub async fn get_current_market_state_collection() -> Collection<CurrentMarketState> {
+        let db = mongodb_connection::fetch_db_connection().await;
+        let current_market_state_collection_name = "current_market_states";
+        let current_market_state_collection = db.collection::<CurrentMarketState>(current_market_state_collection_name);
+        current_market_state_collection
     }
 
     
