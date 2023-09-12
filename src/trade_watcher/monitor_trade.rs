@@ -1,13 +1,12 @@
 use std::sync::Mutex;
 use colored::*;
 use chrono::NaiveTime;
-use mongodb::Collection;
 
 use crate::{order_manager::{order_dispatcher::{OrderManager, Order}, pnl_state::CurrentPnLState}, common::{raw_stock::RawStock, enums::TradeType, redis_client::RedisClient, date_parser::{if_first_time_greater_than_second_time, return_only_time_from_datetime}}};
 
 const THRESHOLD_TRADE_END_TIME: Option<NaiveTime> = NaiveTime::from_hms_opt(15, 15, 0);
 
-pub async fn check_for_execute_opportunity(order_manager: &mut OrderManager, stock: RawStock, redis_client: &Mutex<RedisClient>, order_collection: Collection<Order>, _current_pnl_collection: Collection<CurrentPnLState>, shared_order_ledger: &mut Vec<Order>){
+pub async fn check_for_execute_opportunity(order_manager: &mut OrderManager, stock: RawStock, redis_client: &Mutex<RedisClient>, shared_order_ledger: &mut Vec<Order>){
     // let orders = order_manager.get_orders().clone();
     // let mut shared_orders = shared_order_ledger.lock().unwrap().clone();
     if shared_order_ledger.len() > 0 {
@@ -18,7 +17,7 @@ pub async fn check_for_execute_opportunity(order_manager: &mut OrderManager, sto
     for (_index, order) in shared_order_ledger.iter_mut().enumerate(){
         if !order.is_trade_executed{ //this else block will not be present when Zerodha API is integrated for order execution
             if stock.open >= order.entry_price && order.trade_position_type == TradeType::Long{
-                let updated_order = order_manager.mark_order_executed( order, stock.open, redis_client, &order_collection).await;
+                let updated_order = order_manager.mark_order_executed( order, stock.open, redis_client).await;
                 // println!("updated order: {:?} for index {}", updated_order, index);
                 if updated_order.is_some(){
                     let temp_order = updated_order.unwrap();
@@ -49,7 +48,7 @@ pub async fn check_for_execute_opportunity(order_manager: &mut OrderManager, sto
     }
 }
 
-pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock: RawStock, redis_client: &Mutex<RedisClient>, order_collection: Collection<Order>, current_pnl_collection: Collection<CurrentPnLState>, shared_order_ledger: &mut Vec<Order>){
+pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock: RawStock, redis_client: &Mutex<RedisClient>, shared_order_ledger: &mut Vec<Order>){
     // let orders = order_manager.get_orders().clone();
     // let mut shared_orders = shared_order_ledger.lock().unwrap().clone();
     if shared_order_ledger.len() > 0 {
@@ -83,13 +82,13 @@ pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock:
             }
             let closed_order = if exit_price > 0.0{
 
-                order_manager.close_executed_order( order, exit_price, redis_client, &order_collection).await
+                order_manager.close_executed_order( order, exit_price, redis_client).await
                 // println!("updated order: {:?} for index {}", closed_order, index);
                 
                 
                 // break;
             }else if if_first_time_greater_than_second_time( Some(return_only_time_from_datetime(Some(stock.date.clone()))), THRESHOLD_TRADE_END_TIME){
-               order_manager.close_executed_order( order, stock.close, redis_client, &order_collection).await
+               order_manager.close_executed_order( order, stock.close, redis_client).await
                 // println!("updated order: {:?} for index {}", closed_order, index);
                 
                 // println!("shared order after update at index: {:?} values => {:?}",index, shared_orders[index]);
@@ -110,7 +109,7 @@ pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock:
                 println!("#################");
                 println!();
 
-                CurrentPnLState::update_current_pnl_state_via_order(order, &current_pnl_collection).await;
+                CurrentPnLState::update_current_pnl_state_via_order(order).await;
 
                 closed_order_indexes.push(index);
                 //TODO: phase 2-3 delete the order from the shared order ledger once the order is closed

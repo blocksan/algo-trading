@@ -200,17 +200,16 @@ impl OrderManager {
         &mut self,
         trade_signal: TradeSignal,
         redis_client: &Mutex<RedisClient>,
-        order_collection: Collection<Order>,
-        user_collection: Collection<User>,
         shared_order_ledger: &mut Vec<Order>,
-        current_pnl_state_collection: Collection<CurrentPnLState>,
     ) -> () {
-        let users = User::get_all_active_users(user_collection).await;
+        println!("Checking and dispatching order for symbol {:?}", trade_signal.raw_stock.date.clone());
+        let users = User::get_all_active_users().await;
         let mut dispatched_orders: Vec<Order> = vec![];
         for user in users {
             
             let (current_pnl_cache_key, current_pnl_cache_algo_types_key ) = CurrentPnLState::get_current_pnl_cache_key(
                 trade_signal.raw_stock.date.as_str(),
+                &trade_signal.raw_stock.symbol,
                 &user.id.to_string(),
             );
 
@@ -241,7 +240,6 @@ impl OrderManager {
             let order_exists = OrderManager::check_if_open_order_exists(
                 order_cache_key.as_str(),
                 redis_client,
-                &order_collection,
             )
             .await;
 
@@ -289,7 +287,6 @@ impl OrderManager {
                         current_pnl_cache_key.as_str(),
                         &order,
                         current_pnl_cache_algo_types_key.as_str(),
-                        &current_pnl_state_collection
                     ).await;
 
                 if !is_order_tradeable {
@@ -310,6 +307,7 @@ impl OrderManager {
                     return;
                 }
 
+                let order_collection = OrderManager::get_order_collection().await;
                 //TODO:: add logic to call the Zerodha API to place the order
                 match order_collection.insert_one(order.clone(), None).await {
                     Ok(_) => {
@@ -450,8 +448,8 @@ impl OrderManager {
     async fn check_if_open_order_exists(
         cache_key: &str,
         redis_client: &Mutex<RedisClient>,
-        order_collection: &Collection<Order>,
     ) -> bool {
+        let order_collection = OrderManager::get_order_collection().await;
         let mut order_exists = match redis_client.lock().unwrap().get_data(cache_key) {
             Ok(data) => {
                 // println!("Order exists in Redis for key => {:?}", data);
@@ -496,7 +494,6 @@ impl OrderManager {
         order: &Order,
         exit_price: f32,
         redis_client: &Mutex<RedisClient>,
-        order_collection: &Collection<Order>,
     ) -> Option<Order> {
         let (closing_profit, is_profitable_trade) =
             OrderManager::calculate_profit(order.clone(), exit_price);
@@ -536,6 +533,7 @@ impl OrderManager {
         let filter = doc! {"order_id": updated_order.order_id.clone() };
         let options = UpdateOptions::builder().build();
         let order_document = doc! {"$set":updated_order.clone().to_document()};
+        let order_collection = OrderManager::get_order_collection().await;
         match order_collection
             .update_one(filter, order_document, options)
             .await
@@ -593,7 +591,6 @@ impl OrderManager {
         order: &Order,
         actual_entry_price: f32,
         redis_client: &Mutex<RedisClient>,
-        order_collection: &Collection<Order>
     ) -> Option<Order> {
         let entry_price_delta = actual_entry_price - order.entry_price;
         let executed_order = Order::new(
@@ -631,6 +628,7 @@ impl OrderManager {
         let filter = doc! {"order_id": executed_order.order_id.clone() };
         let options = UpdateOptions::builder().build();
         let order_document = doc! {"$set":executed_order.clone().to_document()};
+        let order_collection = OrderManager::get_order_collection().await;
         match order_collection
             .update_one(filter, order_document, options)
             .await
@@ -690,7 +688,6 @@ impl OrderManager {
         current_pnl_cache_key: &str,
         order: &Order,
         current_pnl_cache_algo_types_key: &str,
-        current_pnl_state_collection: &Collection<CurrentPnLState>,
     ) -> (bool, Option<CurrentPnLState>, String) {
         let current_pnl = match redis_client.lock().unwrap().get_data(current_pnl_cache_key) {
             Ok(data) => {
@@ -730,7 +727,6 @@ impl OrderManager {
                 current_pnl.push_current_pnl_state_to_redis_mongo(
                     current_pnl_cache_key,
                     current_pnl_cache_algo_types_key,
-                    current_pnl_state_collection
                 ).await;
 
                 (false, None, not_eligible_trading_reason)

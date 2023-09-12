@@ -1,5 +1,6 @@
 use mongodb::{options::ClientOptions, Client, Database};
 pub async fn fetch_db_connection()->Database{
+
     let mongo_url = "mongodb://localhost:27017";
     let database_name = "algo_trading";
 

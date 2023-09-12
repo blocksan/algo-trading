@@ -39,6 +39,7 @@ use std::error::Error;
 use std::time::Instant;
 use tokio_tungstenite::connect_async;
 use url::Url;
+use crate::pnl_state::CurrentPnLStateBodyParams;
 
 lazy_static! {
     static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
@@ -124,9 +125,12 @@ async fn main() {
     //END -> add new User into the database
 
     //START -> add the pnl_configuration into the database
+    // let pnl_configuration_collection_name = "pnl_configurations";
+    // let pnl_configuration_collection = client
+    //     .database(database_name)
+    //     .collection::<PnLConfiguration>(pnl_configuration_collection_name);
 
-    pnl_state::PnLConfiguration::new_static_backtest_config()
-        .await;
+    
     //END -> add the pnl_configuration into the database
 
     //START -> add the current_pnl_state into the database
@@ -238,23 +242,56 @@ async fn main() {
 
             let mut raw_stock_ledger = RawStockLedger::new();
 
-            let (mut ws_stream, _) = connect_async(Url::parse(&server_url).unwrap())
-                .await
-                .unwrap();
+           
 
-            println!("Connected to WebSocket server: {}", server_url);
+            let user_id = "64d8febebe3ea57f392c36df"; //TODO: remove this hardcoding and fetch the user_id from the database
+            pnl_state::PnLConfiguration::new_static_backtest_config().await;
+            let pnl_configurations_option = PnLConfiguration::fetch_current_pnl_configuration(None, Some(user_id.to_string()), None).await;
+            
 
-            while let Some(msg) = ws_stream.next().await {
-                match msg {
-                    Ok(message) => {
-                        if message.is_text() {
-                            let text = message.to_text().unwrap();
+            if pnl_configurations_option.is_none(){
+                println!("No PnL Configuration found for user_id: {}", user_id);
+                return Ok(());
+            }
 
-                            let splitted_text = text.split(",").collect::<Vec<&str>>();
+            let pnl_configurations = pnl_configurations_option.unwrap();
+
+            if pnl_configurations.len() == 0{
+                println!("No PnL Configuration found with length 0 for user_id: {}", user_id);
+                return Ok(());
+            }
+
+            for pnl_configuration in pnl_configurations.iter() {
+                for pnl_symbol in pnl_configuration.symbols.iter(){
+                    let symbol = Some(pnl_symbol.to_string().clone());
+
+                    let raw_stocks = RawStock::fetch_raw_stocks(symbol.clone().unwrap(), pnl_configuration.start_trade_date.clone(), pnl_configuration.end_trade_date.clone(), pnl_configuration.time_frame.clone()).await;
+                    if raw_stocks.is_none(){
+                        println!("No Raw Stocks found for user_id: {}", user_id);
+                        continue;
+                    }
+
+                    println!("raw_stocks: {:?}", raw_stocks.clone().unwrap().len());
+
+                    for raw_stock in raw_stocks.unwrap().into_iter(){
+                        {
+                            // let text = message.to_text().unwrap();
+
+                            // let current_pnl_state_patams = CurrentPnLStateBodyParams {
+                            //     start_trade_date: pnl_configuration.start_trade_date.clone(),
+                            //     symbol: symbol.clone(),
+                            //     end_trade_date: None,
+                            //     pnl_congiguration_id: Some(pnl_configuration.id.to_string().clone()),
+                            //     user_id: Some(pnl_configuration.user_id.to_string().clone()),
+                            // };
+
+                            // let splitted_text = text.split(",").collect::<Vec<&str>>();
+                            let RawStock{symbol, date,
+                            open, high, low, close, volume,market_time_frame} = raw_stock.clone();
                             // println!("splitted_text: {:?}",splitted_text);
                             // continue;
                             let date =
-                                match date_parser::parse_date_in_stock_format(splitted_text[1]) {
+                                match date_parser::parse_date_in_stock_format(&date) {
                                     Ok(date) => Some(date),
                                     Err(e) => {
                                         println!("Error while parsing date {:?}", e);
@@ -262,68 +299,68 @@ async fn main() {
                                     }
                                 };
 
-                            let close = match splitted_text[2].parse::<f32>() {
-                                Ok(close) => Some(close),
-                                Err(e) => {
-                                    println!("Error while parsing close {:?}", e);
-                                    None
-                                }
-                            };
+                            // let close = match close.parse::<f32>() {
+                            //     Ok(close) => Some(close),
+                            //     Err(e) => {
+                            //         println!("Error while parsing close {:?}", e);
+                            //         None
+                            //     }
+                            // };
 
-                            let high = match splitted_text[3].parse::<f32>() {
-                                Ok(high) => Some(high),
-                                Err(e) => {
-                                    println!("Error while parsing high {:?}", e);
-                                    None
-                                }
-                            };
+                            // let high = match splitted_text[3].parse::<f32>() {
+                            //     Ok(high) => Some(high),
+                            //     Err(e) => {
+                            //         println!("Error while parsing high {:?}", e);
+                            //         None
+                            //     }
+                            // };
 
-                            let low = match splitted_text[4].parse::<f32>() {
-                                Ok(low) => Some(low),
-                                Err(e) => {
-                                    println!("Error while parsing low {:?}", e);
-                                    None
-                                }
-                            };
+                            // let low = match splitted_text[4].parse::<f32>() {
+                            //     Ok(low) => Some(low),
+                            //     Err(e) => {
+                            //         println!("Error while parsing low {:?}", e);
+                            //         None
+                            //     }
+                            // };
 
-                            let open = match splitted_text[5].parse::<f32>() {
-                                Ok(open) => Some(open),
-                                Err(e) => {
-                                    println!("Error while parsing open {:?}", e);
-                                    None
-                                }
-                            };
+                            // let open = match splitted_text[5].parse::<f32>() {
+                            //     Ok(open) => Some(open),
+                            //     Err(e) => {
+                            //         println!("Error while parsing open {:?}", e);
+                            //         None
+                            //     }
+                            // };
                             //removing "\"" from the end of the string to parse the volume correctly => &splitted_text[6][0..splitted_text[6].len()-1]
-                            let volume = match &splitted_text[6][0..splitted_text[6].len() - 1]
-                                .parse::<i32>()
-                            {
-                                Ok(volume) => Some(*volume),
-                                Err(e) => {
-                                    println!("Error while parsing volume {:?}", e);
-                                    None
-                                }
-                            };
+                            // let volume = match &splitted_text[6][0..splitted_text[6].len() - 1]
+                            //     .parse::<i32>()
+                            // {
+                            //     Ok(volume) => Some(*volume),
+                            //     Err(e) => {
+                            //         println!("Error while parsing volume {:?}", e);
+                            //         None
+                            //     }
+                            // };
 
-                            if date.is_none()
-                                || close.is_none()
-                                || high.is_none()
-                                || low.is_none()
-                                || open.is_none()
-                                || volume.is_none()
-                            {
-                                println!("Header or Some of the values are None");
-                                continue;
-                            }
+                            // if date.is_none()
+                            //     || close.is_none()
+                            //     || high.is_none()
+                            //     || low.is_none()
+                            //     || open.is_none()
+                            //     || volume.is_none()
+                            // {
+                            //     println!("Header or Some of the values are None");
+                            //     continue;
+                            // }
 
                             let raw_stock = RawStock::new(
-                                "ADANIGREEN".to_owned(),
+                                symbol.to_owned(),
                                 date.unwrap(),
-                                close.unwrap(),
-                                high.unwrap(),
-                                low.unwrap(),
-                                open.unwrap(),
-                                volume.unwrap(),
-                                thread_worker_config.time_frame.clone(),
+                                close,
+                                high,
+                                low,
+                                open,
+                                volume,
+                                market_time_frame,
                             );
 
                             // println!("Received on {} tick: {:?}",thread_worker_config.time_frame, text);
@@ -336,14 +373,6 @@ async fn main() {
 
                             match thread_worker_config.time_frame {
                                 TimeFrame::FiveMinutes => {
-                                    CurrentPnLState::new_static_current_pnl_state(
-                                        raw_stock.symbol.as_str(),
-                                        "64d8febebe3ea57f392c36df",
-                                        raw_stock.date.as_str(),
-                                        raw_stock.date.as_str(),
-                                    )
-                                    .await;
-
                                     CurrentMarketState::calculate_market_state(
                                         &raw_stock,
                                         raw_stock.market_time_frame.clone(),
@@ -351,7 +380,13 @@ async fn main() {
                                         &raw_stock_ledger,
                                     )
                                     .await;
-
+// let current_pnl_state_patams = CurrentPnLStateBodyParams {
+                            //     start_trade_date: pnl_configuration.start_trade_date.clone(),
+                            //     symbol: symbol.clone(),
+                            //     end_trade_date: None,
+                            //     pnl_congiguration_id: Some(pnl_configuration.id.to_string().clone()),
+                            //     user_id: Some(pnl_configuration.user_id.to_string().clone()),
+                            // };
                                     algo_dispatcher::ingest_raw_stock_data(
                                         &raw_stock,
                                         tradeable_algo_types.clone(),
@@ -359,11 +394,18 @@ async fn main() {
                                         trade_keeper.clone(),
                                         order_manager.clone(),
                                         redis_client.clone(),
-                                        None,
+                                        Some(pnl_configuration.id.to_string()),
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
                                     monitor_trade::check_for_exit_opportunity(
+                                        &mut order_manager,
+                                        raw_stock.clone(),
+                                        redis_client.clone(),
+                                        &mut locked_shared_order_ledger,
+                                    )
+                                    .await;
+                                    monitor_trade::check_for_execute_opportunity(
                                         &mut order_manager,
                                         raw_stock.clone(),
                                         redis_client.clone(),
@@ -377,16 +419,16 @@ async fn main() {
                                     // println!("Received Stock: {:?} at Timeframe {}", message.to_text().unwrap(), thread_worker_config.time_frame );
                                     // println!();
 
-                                    monitor_trade::check_for_execute_opportunity(
-                                        &mut order_manager,
-                                        raw_stock.clone(),
-                                        redis_client.clone(),
-                                        &mut locked_shared_order_ledger,
-                                    )
-                                    .await;
+                                    // monitor_trade::check_for_execute_opportunity(
+                                    //     &mut order_manager,
+                                    //     raw_stock.clone(),
+                                    //     redis_client.clone(),
+                                    //     &mut locked_shared_order_ledger,
+                                    // )
+                                    // .await;
                                     // let temp = shared_order_ledger.lock().unwrap().clone();
                                     // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
-                                    drop(locked_shared_order_ledger);
+                                    // drop(locked_shared_order_ledger);
                                 }
                                 _ => (),
                             }
@@ -396,12 +438,36 @@ async fn main() {
                             // }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Error while receiving message: {:?}", e);
-                    }
-                }
-            }
+                    
 
+                    
+                    // let temp = current_pnl_state_patams.clone();
+                    //Info: creation of the current_pnl_states will happen while fetching the current_pnl_state for that stock
+                    // let mut current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_patams.clone(), false).await;
+                    // if current_pnl_states.is_none(){
+                    //     println!("No Current PnL State found for user_id: {}", user_id);
+
+                    //     CurrentPnLState::new_static_current_pnl_state(symbol.unwrap().as_str(), pnl_configuration.id.to_string().as_str(), pnl_configuration.start_trade_date.as_str(), pnl_configuration.end_trade_date.as_str()).await;
+                    //     current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_patams, false).await;
+                    //     if current_pnl_states.is_none(){
+                    //         println!("Still No Current PnL State found for user_id: {}", user_id);
+                    //         continue;
+                    //     }
+                    // }
+
+                    // for current_pnl_state in current_pnl_states.unwrap().iter(){
+                        
+
+                        // for raw_stock in raw_stocks.unwrap().into_iter(){
+                        //     println!("******START********");
+                        //     println!("raw_stock: {:?}", raw_stock);
+                        //     println!("******END*******");
+                        // }
+                        //TODO: iterate over the raw_stocks and calculate the everything with corresponding current_pnl_state_id which is the id of the current_pnl_state and act as session_id
+                    // }
+                }
+
+            }
             Ok(())
         }
     }

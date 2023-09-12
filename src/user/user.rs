@@ -91,7 +91,8 @@ impl User {
         }
     }
 
-    pub async fn get_all_active_users(user_collection: Collection<User>) -> Vec<User> {
+    pub async fn get_all_active_users() -> Vec<User> {
+        let user_collection = User::get_user_collection().await;
         let filter = doc! { "active": true };
         let users = match user_collection.find(filter, None).await {
             Ok(users) => {

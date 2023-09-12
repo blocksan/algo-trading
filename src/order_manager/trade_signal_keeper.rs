@@ -159,8 +159,8 @@ impl TradeSignalsKeeper{
         }
     }
 
-    pub async fn add_trade_signal(&mut self, trade_signal: &TradeSignal, trade_signal_collection: Collection<TradeSignal>) {
-        
+    pub async fn add_trade_signal(&mut self, trade_signal: &TradeSignal) {
+        let trade_signal_collection = TradeSignal::get_trade_signal_collection().await;
         match trade_signal_collection.insert_one(trade_signal.clone(), None).await{
             Ok(_) => {
                 println!("Trading signal added to the database");

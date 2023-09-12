@@ -8,6 +8,10 @@ name = "socket_data_1min"
 path = "src/socket_data_1min.rs"
 
 [[bin]]
+name = "backtest_main"
+path = "src/backtest_main.rs"
+
+[[bin]]
 name = "api_server"
 path = "src/api_server.rs"
 

@@ -191,10 +191,10 @@ impl HammerPatternUtil {
         self.hammer_pattern_ledger.clone()
     }
 
-    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, hammer_candle_collection: Collection<HammerCandle>, current_market_state_collection: &Collection<CurrentMarketState>) -> Option<TradeSignal> {
+    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock) -> Option<TradeSignal> {
         
         let (is_hammer_candle, calculated_body_size, is_green_candle) =
-        HammerPatternUtil::calculate_candle_metadata(stock, current_market_state_collection).await;
+        HammerPatternUtil::calculate_candle_metadata(stock).await;
 
 
         if is_hammer_candle {
@@ -213,7 +213,7 @@ impl HammerPatternUtil {
                 date_parser::new_current_date_time_in_desired_stock_datetime_format(),
                 ObjectId::new()
             );
-
+            let hammer_candle_collection = HammerCandle::get_hammer_candles_collection().await;
             match hammer_candle_collection.insert_one(hammer_candle.clone(), None).await{
                 Ok(_result) => {
                     // println!("Hammer candle inserted into the database {:?}", result);
@@ -229,7 +229,6 @@ impl HammerPatternUtil {
     }
     async fn calculate_candle_metadata(
         stock: &RawStock,
-        current_market_state_collection: &Collection<CurrentMarketState>
     ) -> (bool, f32, bool) {
         let open = stock.open;
         let high = stock.high;
@@ -237,7 +236,7 @@ impl HammerPatternUtil {
         let close = stock.close;
         let calculated_body_size: f32 = RawStock::candle_body_size(open, close);
         let is_hammer_candle =
-        HammerPatternUtil::calculate_hammer_candle(calculated_body_size, open, high, low, close, current_market_state_collection, stock).await;
+        HammerPatternUtil::calculate_hammer_candle(calculated_body_size, open, high, low, close, stock).await;
 
         let is_green_candle = RawStock::calculate_if_green_candle(open, close);
 
@@ -254,7 +253,6 @@ impl HammerPatternUtil {
         high: f32,
         low: f32,
         close: f32,
-        current_market_state_collection: &Collection<CurrentMarketState>,
         stock: &RawStock
     ) -> bool {
         let lower_wick = if open > close {
@@ -305,7 +303,7 @@ impl HammerPatternUtil {
         let trade_date_only = date_parser::return_only_date_from_datetime(stock.date.as_str());
         let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
 
-        let current_market_state_option = CurrentMarketState::fetch_previous_market_state(&current_market_state_cache_key,redis_client, current_market_state_collection).await;
+        let current_market_state_option = CurrentMarketState::fetch_previous_market_state(&current_market_state_cache_key,redis_client).await;
         
         if current_market_state_option.is_some(){
             let current_market_state = current_market_state_option.unwrap();

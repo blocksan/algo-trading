@@ -96,15 +96,7 @@ pub struct TradeableAlgoConfig<GenericCollectionStruct, GenericCollectionLedger>
 
 #[derive(Debug, Clone)]
 pub struct RootSystemConfig {
-    pub database_instance : Database,
-    pub hammer_candle_collection: Collection<HammerCandle>,
     pub hammer_ledger: HammerPatternUtil,
-    pub current_market_state_collection: Collection<CurrentMarketState>,
-    pub orders_collection: Collection<Order>,
-    pub trade_signal_collection: Collection<TradeSignal>,
-    pub current_pnl_state_collection: Collection<CurrentPnLState>,
-    pub pnl_configuration_collection: Collection<PnLConfiguration>,
-    pub user_collection: Collection<User>,
     pub server_url: String,
     pub tradeable_algo_types: Vec<AlgoTypes>,
     pub trade_keeper: TradeSignalsKeeper, 

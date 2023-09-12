@@ -1,7 +1,7 @@
 use colored::*;
 use std::sync::Mutex;
 use crate::{common::{enums::{TimeFrame, MarketTrend}, raw_stock::{RawStock, RawStockLedger}, date_parser, redis_client::RedisClient, utils::current_market_state_cache_key_formatter}, config::mongodb_connection};
-use mongodb::{Collection, Database, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
+use mongodb::{Collection, options::{UpdateOptions, FindOneOptions}, bson::{doc, oid::ObjectId, Document}};
 use serde::{Deserialize, Serialize};
 
 use super::support_resistance_fractol::find_support_resistance;
@@ -191,12 +191,12 @@ impl CurrentMarketState {
         }
     }
 
-    pub async fn calculate_market_state(stock: &RawStock, time_frame: TimeFrame, current_market_state_collection: &Collection<CurrentMarketState>, redis_client: &Mutex<RedisClient>, raw_stock_ledger: &RawStockLedger, database_instance: Database) {
+    pub async fn calculate_market_state(stock: &RawStock, time_frame: TimeFrame, redis_client: &Mutex<RedisClient>, raw_stock_ledger: &RawStockLedger) {
         println!("Calculating market state for stock_time => {}", format!("{}",stock.date).yellow());
         let trade_date_only = date_parser::return_only_date_from_datetime(stock.date.as_str());
         let current_market_state_cache_key = current_market_state_cache_key_formatter(trade_date_only.as_str(), stock.symbol.as_str(), &stock.market_time_frame);
         
-        let previous_market_state = Self::fetch_previous_market_state(current_market_state_cache_key.as_str(), redis_client, current_market_state_collection).await;
+        let previous_market_state = Self::fetch_previous_market_state(current_market_state_cache_key.as_str(), redis_client).await;
 
          let current_market_state = match time_frame {
             TimeFrame::OneMinute => {
@@ -235,7 +235,7 @@ impl CurrentMarketState {
             }
         };
 
-        Self::push_current_market_state_to_redis_mongo(&current_market_state, redis_client, current_market_state_collection).await;
+        Self::push_current_market_state_to_redis_mongo(&current_market_state, redis_client).await;
     }
 
     fn calculate_market_state_for_oneminute(stock: RawStock) -> Option<CurrentMarketState>{
@@ -425,9 +425,10 @@ impl CurrentMarketState {
         }
     }
 
-    async fn push_current_market_state_to_redis_mongo(current_market_state: &Option<CurrentMarketState>, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>){
+    async fn push_current_market_state_to_redis_mongo(current_market_state: &Option<CurrentMarketState>, redis_client: &Mutex<RedisClient>){
         match current_market_state {
             Some(current_market_state) => {
+                let current_market_state_collection = Self::get_current_market_state_collection().await;
                 let filter = doc! {"cache_key": current_market_state.cache_key.clone() };
                 let options = UpdateOptions::builder().upsert(true).build();
                 let document = doc!{"$set":current_market_state.to_document()};
@@ -454,8 +455,8 @@ impl CurrentMarketState {
             }
         }
     }
-    pub async fn fetch_previous_market_state(current_market_state_cache_key: &str, redis_client: &Mutex<RedisClient>, current_market_state_collection: &Collection<CurrentMarketState>)->Option<CurrentMarketState>{
-
+    pub async fn fetch_previous_market_state(current_market_state_cache_key: &str, redis_client: &Mutex<RedisClient>)->Option<CurrentMarketState>{
+        let current_market_state_collection = Self::get_current_market_state_collection().await;
         let filter = doc! {"cache_key": current_market_state_cache_key.clone() };
         let options = FindOneOptions::builder().build();
         let previous_market_state = match redis_client.lock().unwrap().get_data(current_market_state_cache_key) {
