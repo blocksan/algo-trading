@@ -12,14 +12,13 @@ use data_consumer::current_market_state::CurrentMarketState;
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
-    pnl_state::{self, CurrentPnLState, PnLConfiguration},
+    pnl_state::{CurrentPnLState, PnLConfiguration},
     trade_signal_keeper,
 };
 use std::sync::{Arc, Mutex as SyncMutex};
 use tokio::sync::Mutex;
 extern crate mongodb;
 extern crate tokio;
-use mongodb::{options::ClientOptions, Client};
 
 use crate::{
     algo_hub::algo_dispatcher,
@@ -85,11 +84,6 @@ async fn main() {
             println!("Using development environment variables");
         }
     }
-    let mongo_url = "mongodb://localhost:27017";
-    let database_name = "algo_trading";
-
-    let client_options = ClientOptions::parse(mongo_url).await.unwrap();
-    let client = Client::with_options(client_options).unwrap();
 
     // let stock_5_min_data = data_consumer_via_csv::read_5_min_data(FILE_5MIN_PATH).unwrap();
     // let hammer_candle_collection_name = "hammer_candles";
@@ -125,8 +119,8 @@ async fn main() {
 
     //START -> add the pnl_configuration into the database
 
-    pnl_state::PnLConfiguration::new_static_backtest_config()
-        .await;
+    //TODO: PnLConfiguration::new_static_backtest_config()
+    //     .await;
     //END -> add the pnl_configuration into the database
 
     //START -> add the current_pnl_state into the database
@@ -178,6 +172,7 @@ async fn main() {
                 trade_keeper: trade_keeper.clone(),
                 order_manager: order_manager.clone(),
                 shared_order_ledger: shared_order_ledger.clone(),
+                pnl_configuration_id: "dummy_pnl_configuration_id".to_string()
             },
         }, //fiveminute socket
            // ThreadWorkerConfig {
@@ -234,6 +229,7 @@ async fn main() {
                 trade_keeper,
                 mut order_manager,
                 shared_order_ledger,
+                pnl_configuration_id:_
             } = thread_worker_config.root_system_config;
 
             let mut raw_stock_ledger = RawStockLedger::new();

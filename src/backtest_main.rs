@@ -73,7 +73,7 @@ lazy_static! {
 }
 
 #[tokio::main]
-async fn main() {
+pub async fn main() {
     let start_time = Instant::now();
     let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| String::from("development"));
     match environment.as_str() {

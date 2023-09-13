@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 
 // pub fn date_util() {
-const DESIRED_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%Z";
+pub const DESIRED_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%Z";
 const FILE_STOCK_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%z";
 const _DESIRED_STOCK_ORDER_CACHE_DATETIME_FORMAT: &str = "%Y_%m_%d_%H:%M:%S";
 
@@ -73,6 +73,38 @@ pub fn if_first_time_greater_than_second_time(
     }
 
     false
+}
+
+pub fn return_days_between_dates(date1: &str, date2: &str, returns_days: bool) -> (i64, Option<Vec<NaiveDate>>) {
+    let date_time1 = DateTime::parse_from_str(date1, FILE_STOCK_DATETIME_FORMAT).unwrap();
+    let date_time2 = DateTime::parse_from_str(date2, FILE_STOCK_DATETIME_FORMAT).unwrap();
+    let difference = date_time1.signed_duration_since(date_time2);
+    if returns_days {
+        let mut dates: Vec<NaiveDate> = Vec::new();
+        let mut date = date_time1;
+        while date <= date_time2 {
+            dates.push(date.date_naive());
+            date = date + chrono::Duration::days(1);
+        }
+
+        let filtered_dates = dates
+            .into_iter()
+            .filter(|date| {
+                let day = date.weekday();
+                day != Weekday::Sat && day != Weekday::Sun
+            })
+            .collect::<Vec<NaiveDate>>();
+
+        return (filtered_dates.len() as i64, Some(filtered_dates));
+    }
+    (difference.num_days(), None)
+}
+
+
+pub fn return_trading_start_end_time() -> (NaiveTime, NaiveTime) {
+    let start_time = NaiveTime::from_hms(9, 15, 0);
+    let end_time = NaiveTime::from_hms(15, 25, 0);
+    (start_time, end_time)
 }
 
 // }

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDateTime, FixedOffset, TimeZone};
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, oid::ObjectId, Document},
@@ -10,7 +10,7 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 
 use crate::{common::{
-    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format},
+    date_parser::{self, new_current_date_time_in_desired_stock_datetime_format, parse_date_in_stock_format, return_days_between_dates, return_trading_start_end_time, DESIRED_STOCK_DATETIME_FORMAT},
     enums::{AlgoTypes, TimeFrame},
     redis_client::RedisClient,
     utils,
@@ -18,13 +18,14 @@ use crate::{common::{
 
 use super::order_dispatcher::Order;
 
-pub const CURRENT_STOCK_DATE: &str = "2022-10-18 09:30:00+05:30";
+pub const CURRENT_STOCK_DATE: &str = "2022-10-14 09:30:00+05:30";
 pub const END_STOCK_DATE: &str = "2022-10-18 15:30:00+05:30";
 pub const STATIC_SYMBOL:&str = "ADANIGREEN";
+pub const STATIC_USER_ID:&str = "64d8febebe3ea57f392c36df";
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct CurrentPnLStateBodyParams{
-    pub start_trade_date: String,
+    pub start_trade_date: Option<String>,
     pub symbol: Option<String>,
     pub end_trade_date: Option<String>,
     pub user_id: Option<String>,
@@ -125,12 +126,51 @@ impl CurrentPnLState {
         }
     }
 
+    pub async fn create_current_pnl_states(pnl_configurations: Option<Vec<PnLConfiguration>>) -> Option<String> {
+        if pnl_configurations.is_none() {
+            println!("create_current_pnl_states => No PnL configuration found");
+            return None;
+        }
+        let (trading_start_time, trading_end_time) = return_trading_start_end_time();
+        for pnl_configuration in pnl_configurations.unwrap().into_iter(){
+            let (number_of_days, dates) = return_days_between_dates(pnl_configuration.start_trade_date.as_str(), pnl_configuration.end_trade_date.as_str(), true);
+            
+
+
+            for date in dates.unwrap().into_iter(){
+
+                let start_trade_date = NaiveDateTime::new(date, trading_start_time);
+                let end_trade_date = NaiveDateTime::new(date, trading_end_time);
+
+
+                // Specify the IST timezone (Asia/Kolkata)
+                let IST_OFFSET = FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap(); // UTC offset for IST
+
+
+                for pnl_symbol in pnl_configuration.symbols.iter(){
+                    CurrentPnLState::new_static_current_pnl_state(
+                        pnl_symbol.as_str(),
+                        pnl_configuration.id.to_string().as_str(),
+                        IST_OFFSET.from_local_datetime(&start_trade_date).single().unwrap().format(DESIRED_STOCK_DATETIME_FORMAT).to_string().as_str(),
+                        IST_OFFSET.from_local_datetime(&end_trade_date).single().unwrap().format(DESIRED_STOCK_DATETIME_FORMAT).to_string().as_str(),
+                    ).await;
+                }
+            }
+        }
+
+        Some(String::from("Current PnL states created"))
+        // let result = create_curren_pnl_states(pnl_configurations).await;
+        // result
+    }
+
     pub async fn new_static_current_pnl_state(
         symbol: &str,
         pnl_configuration_id: &str,
         start_trading_date: &str,
         end_trading_date: &str
     ) {
+
+        println!("new_static_current_pnl_state => symbol: {}, pnl_configuration_id: {}, start_trading_date: {}, end_trading_date: {}", symbol, pnl_configuration_id, start_trading_date, end_trading_date);
 
         let (current_pnl_cache_key, _current_pnl_cache_algo_types_key ) =
             Self::get_current_pnl_cache_key(start_trading_date.clone(), symbol, pnl_configuration_id);
@@ -270,9 +310,9 @@ impl CurrentPnLState {
         let CurrentPnLStateBodyParams {user_id, symbol, start_trade_date, end_trade_date, pnl_congiguration_id}  = current_pnl_state_patams;
         let mut filter:Document = doc!{};
         let mut current_pnl_states: Option<Vec<CurrentPnLState>> = None;
-        if pnl_congiguration_id.is_some() && symbol.is_some(){
+        if pnl_congiguration_id.is_some() && symbol.is_some() && start_trade_date.is_some(){
             let (current_pnl_cache_key,_ ) =
-            Self::get_current_pnl_cache_key(start_trade_date.as_str(), symbol.clone().unwrap().as_str(), pnl_congiguration_id.unwrap().to_string().as_str());
+            Self::get_current_pnl_cache_key(start_trade_date.unwrap().as_str(), symbol.clone().unwrap().as_str(), pnl_congiguration_id.unwrap().to_string().as_str());
             let current_pnl_state = Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), only_via_redis).await;
             if current_pnl_state.is_some(){
                 let current_pnl_state = current_pnl_state.unwrap();
@@ -280,7 +320,8 @@ impl CurrentPnLState {
                 return current_pnl_states;
             }
             return None
-        }else if end_trade_date.is_some(){
+        }
+        if end_trade_date.is_some(){
             println!("fetch_current_pnl_state => end_trade_date is {:?}", end_trade_date);
             filter = doc! {
                 "start_trade_date": {
@@ -289,7 +330,8 @@ impl CurrentPnLState {
                 }
             };
             
-        }else if pnl_congiguration_id.is_some(){
+        } 
+        if pnl_congiguration_id.is_some(){
             filter = doc! {
                 "pnl_configuration_id": ObjectId::from_str(pnl_congiguration_id.clone().unwrap().as_str()).unwrap(),
             };
@@ -604,12 +646,14 @@ impl PnLConfiguration {
         let created_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         let updated_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         //TODO: remove static date once live market data is available
-        let start_trade_date = DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z")
+        let start_trade_date =  parse_date_in_stock_format(CURRENT_STOCK_DATE) 
             .unwrap()
             .to_string();
 
+        //DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%Z")
+
         //TODO: remove static date once live market data is available
-        let end_trade_date = DateTime::parse_from_str(END_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z")
+        let end_trade_date = parse_date_in_stock_format(END_STOCK_DATE)
             .unwrap()
             .to_string();
         let max_trade_count = 5;
@@ -621,7 +665,7 @@ impl PnLConfiguration {
         let max_target_hit_count = 4;
         let max_sl_capacity = -500.0;
         let max_trade_capital = 4000000.0;
-        let user_id = ObjectId::from_str("64d8febebe3ea57f392c36df").unwrap();
+        let user_id = ObjectId::from_str(STATIC_USER_ID).unwrap();
         let id = ObjectId::new();
         let is_backtest_config = true;
         let new_pnl_configuration = PnLConfiguration::new(

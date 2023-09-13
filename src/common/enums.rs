@@ -101,5 +101,6 @@ pub struct RootSystemConfig {
     pub tradeable_algo_types: Vec<AlgoTypes>,
     pub trade_keeper: TradeSignalsKeeper, 
     pub order_manager: order_manager::order_dispatcher::OrderManager,
-    pub shared_order_ledger: Arc<Mutex<Vec<Order>>>
+    pub shared_order_ledger: Arc<Mutex<Vec<Order>>>,
+    pub pnl_configuration_id: String, //INFO: specific to backtest only
 }
