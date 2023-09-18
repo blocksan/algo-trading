@@ -126,3 +126,17 @@ impl RawStockLedger {
         self.raw_stocks.push(raw_stock);
     }
 }
+
+// #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// #[allow(dead_code, unused_variables)]
+// pub struct BacktestRawStock {
+//     pub symbol: String,
+//     pub date: String,
+//     pub close: f32,
+//     pub high: f32,
+//     pub low: f32,
+//     pub open: f32,
+//     pub volume: i32,
+//     pub market_time_frame: TimeFrame,
+//     pub pnl_configuration_id: String
+// }

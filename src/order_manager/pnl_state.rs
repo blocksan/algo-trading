@@ -19,7 +19,7 @@ use crate::{common::{
 use super::order_dispatcher::Order;
 
 pub const CURRENT_STOCK_DATE: &str = "2022-10-14 09:30:00+05:30";
-pub const END_STOCK_DATE: &str = "2022-10-18 15:30:00+05:30";
+pub const END_STOCK_DATE: &str = "2022-10-27 15:30:00+05:30";
 pub const STATIC_SYMBOL:&str = "ADANIGREEN";
 pub const STATIC_USER_ID:&str = "64d8febebe3ea57f392c36df";
 
@@ -30,6 +30,7 @@ pub struct CurrentPnLStateBodyParams{
     pub end_trade_date: Option<String>,
     pub user_id: Option<String>,
     pub pnl_congiguration_id: Option<String>,
+    pub current_pnl_state_id: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -126,16 +127,16 @@ impl CurrentPnLState {
         }
     }
 
-    pub async fn create_current_pnl_states(pnl_configurations: Option<Vec<PnLConfiguration>>) -> Option<String> {
+    pub async fn backtest_create_current_pnl_states(pnl_configurations: Option<Vec<PnLConfiguration>>) -> Option<String> {
         if pnl_configurations.is_none() {
-            println!("create_current_pnl_states => No PnL configuration found");
+            println!("backtest_create_current_pnl_states => No PnL configuration found");
             return None;
         }
         let (trading_start_time, trading_end_time) = return_trading_start_end_time();
         for pnl_configuration in pnl_configurations.unwrap().into_iter(){
-            let (number_of_days, dates) = return_days_between_dates(pnl_configuration.start_trade_date.as_str(), pnl_configuration.end_trade_date.as_str(), true);
+            let (_number_of_days, dates) = return_days_between_dates(pnl_configuration.start_trade_date.as_str(), pnl_configuration.end_trade_date.as_str(), true);
             
-
+            // println!("backtest_create_current_pnl_states => dates: {:?}", dates);
 
             for date in dates.unwrap().into_iter(){
 
@@ -148,9 +149,9 @@ impl CurrentPnLState {
 
 
                 for pnl_symbol in pnl_configuration.symbols.iter(){
-                    CurrentPnLState::new_static_current_pnl_state(
+                    CurrentPnLState::backtest_new_static_current_pnl_state(
                         pnl_symbol.as_str(),
-                        pnl_configuration.id.to_string().as_str(),
+                        pnl_configuration.clone(),
                         IST_OFFSET.from_local_datetime(&start_trade_date).single().unwrap().format(DESIRED_STOCK_DATETIME_FORMAT).to_string().as_str(),
                         IST_OFFSET.from_local_datetime(&end_trade_date).single().unwrap().format(DESIRED_STOCK_DATETIME_FORMAT).to_string().as_str(),
                     ).await;
@@ -185,11 +186,14 @@ impl CurrentPnLState {
         //TODO: fetch it for the current day only by adding end_trade_date as well
            //DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z").unwrap().to_string();
 
-        let pnl_configuration_found = PnLConfiguration::fetch_current_pnl_configuration(Some(pnl_configuration_id.to_string()), None, None).await;
+        let pnl_configuration_found = PnLConfiguration::fetch_current_pnl_configuration(Some(pnl_configuration_id.to_string()), None, None, None).await;
         
         match pnl_configuration_found {
             Some(pnl_configurations) => {
                 for pnl_configuration in pnl_configurations {
+
+                    let current_pnl_state_id = ObjectId::new();
+
                     let start_trade_date = start_trading_date.clone(); //TODO: update the trading date with the current date SOD
                     let end_trade_date = end_trading_date.clone(); //TODO: update the trading date with the current date EOD
                     let current_pnl = 0.0;
@@ -211,7 +215,7 @@ impl CurrentPnLState {
                     let user_id = pnl_configuration.user_id.clone();
                     let symbol = pnl_configuration.symbols[0].clone();
                     let (current_pnl_cache_key,current_pnl_cache_algo_types_key ) =
-                        Self::get_current_pnl_cache_key(start_trade_date, symbol.as_str(), pnl_configuration.id.to_string().as_str());
+                        Self::get_current_pnl_cache_key(start_trade_date, symbol.as_str(), current_pnl_state_id.clone().to_string().as_str());
                     let created_at = new_current_date_time_in_desired_stock_datetime_format();
                     let updated_at = new_current_date_time_in_desired_stock_datetime_format();
                     let trading_algo_types = pnl_configuration.trading_algo_types.clone();
@@ -240,13 +244,13 @@ impl CurrentPnLState {
                         symbol,
                         trading_algo_types,
                         pnl_configuration.time_frame.clone(),
-                        ObjectId::new(),
+                        current_pnl_state_id,
                         created_at,
                         updated_at,
                         user_id,
                     );
 
-                    println!("new_current_pnl_state => {:?}", new_current_pnl_state.clone());
+                    // println!("new_current_pnl_state => {:?}", new_current_pnl_state.clone());
                     new_current_pnl_state
                         .push_current_pnl_state_to_redis_mongo(
                             current_pnl_cache_key.as_str(),
@@ -261,6 +265,110 @@ impl CurrentPnLState {
         }
     }
 
+    }
+
+
+    pub async fn backtest_new_static_current_pnl_state(
+        symbol: &str,
+        pnl_configuration: PnLConfiguration,
+        start_trading_date: &str,
+        end_trading_date: &str
+    ) {
+
+        // println!("new_static_current_pnl_state => symbol: {}, pnl_configuration_id: {}, start_trading_date: {}, end_trading_date: {}", symbol, pnl_configuration.id.clone().to_string(), start_trading_date, end_trading_date);
+
+        // let pnl
+        let current_pnl_state_params = CurrentPnLStateBodyParams{
+            start_trade_date: Some(start_trading_date.to_string()),
+            symbol: Some(symbol.to_string()),
+            end_trade_date: None,
+            user_id: None,
+            pnl_congiguration_id: Some(pnl_configuration.id.clone().to_string()),
+            current_pnl_state_id: None,
+        };
+        let current_pnl_state_option =
+            Self::fetch_current_pnl_state( current_pnl_state_params, false).await;
+        
+        if current_pnl_state_option.is_some() && current_pnl_state_option.clone().unwrap().len() > 0 {
+            return ();
+        }else{
+        // let start_dated_formatted = DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z").unwrap();
+        //TODO: fetch it for the current day only by adding end_trade_date as well
+           //DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%z").unwrap().to_string();
+
+
+                    let current_pnl_state_id = ObjectId::new();
+                    println!("current_pnl_state_id => {:?}", current_pnl_state_id.clone());
+                    let start_trade_date = start_trading_date.clone(); //TODO: update the trading date with the current date SOD
+                    let end_trade_date = end_trading_date.clone(); //TODO: update the trading date with the current date EOD
+                    let current_pnl = 0.0;
+                    let current_pnl_percentage = 0.0;
+                    let targeted_pnl = pnl_configuration.targeted_pnl;
+                    let targeted_pnl_percentage = pnl_configuration.targeted_pnl_percentage;
+                    let current_sl_hit_count = 0;
+                    let max_sl_hit_count = pnl_configuration.max_sl_hit_count;
+                    let current_trade_count = 0;
+                    let max_trade_count = pnl_configuration.max_trade_count;
+                    let current_target_hit_count = 0;
+                    let max_target_hit_count = pnl_configuration.max_target_hit_count;
+                    let target_hit_percentage = 0.0;
+                    let max_sl_capacity = pnl_configuration.max_sl_capacity;
+                    let max_trade_capital = pnl_configuration.max_trade_capital;
+                    let current_used_trade_capital = 0.0;
+                    let is_eligible_for_trading = true;
+                    let pnl_configuration_id = pnl_configuration.id.clone();
+                    let user_id = pnl_configuration.user_id.clone();
+                    let symbol = pnl_configuration.symbols[0].clone();
+                    
+                    let (current_pnl_cache_key,current_pnl_cache_algo_types_key ) =
+                        Self::get_current_pnl_cache_key(start_trade_date, symbol.as_str(), current_pnl_state_id.clone().to_string().as_str());
+                    
+                    let created_at = new_current_date_time_in_desired_stock_datetime_format();
+                    let updated_at = new_current_date_time_in_desired_stock_datetime_format();
+                    let trading_algo_types = pnl_configuration.trading_algo_types.clone();
+                    let symbol = pnl_configuration.symbols[0].clone();
+
+                    println!("current_pnl_state_id => {:?}", current_pnl_state_id.clone());
+                    let new_current_pnl_state = CurrentPnLState::new(
+                        start_trade_date.to_string(),
+                        end_trade_date.to_string(),
+                        current_pnl,
+                        current_pnl_percentage,
+                        targeted_pnl,
+                        targeted_pnl_percentage,
+                        current_sl_hit_count,
+                        max_sl_hit_count,
+                        current_trade_count,
+                        max_trade_count,
+                        current_target_hit_count,
+                        max_target_hit_count,
+                        target_hit_percentage,
+                        max_sl_capacity,
+                        max_trade_capital,
+                        is_eligible_for_trading,
+                        "".to_string(),
+                        current_used_trade_capital,
+                        current_pnl_cache_key.clone(),
+                        pnl_configuration_id,
+                        symbol,
+                        trading_algo_types,
+                        pnl_configuration.time_frame.clone(),
+                        current_pnl_state_id,
+                        created_at,
+                        updated_at,
+                        user_id,
+                    );
+
+                    println!("new_current_pnl_state => {:?}", new_current_pnl_state.id.clone());
+
+                    // println!("new_current_pnl_state => {:?}", new_current_pnl_state.clone());
+                    new_current_pnl_state
+                        .push_current_pnl_state_to_redis_mongo(
+                            current_pnl_cache_key.as_str(),
+                            current_pnl_cache_algo_types_key.as_str(),
+                        )
+                        .await;
+                }
     }
 
     pub async fn fetch_current_pnl_state_via_cache_key(
@@ -303,16 +411,19 @@ impl CurrentPnLState {
     }
 
     pub async fn fetch_current_pnl_state(
-        current_pnl_state_patams: CurrentPnLStateBodyParams,
+        current_pnl_state_params: CurrentPnLStateBodyParams,
         only_via_redis: bool,
     ) -> Option<Vec<CurrentPnLState>> {
-        // println!("fetch_current_pnl_state => {:?}", current_pnl_state_patams.clone());
-        let CurrentPnLStateBodyParams {user_id, symbol, start_trade_date, end_trade_date, pnl_congiguration_id}  = current_pnl_state_patams;
+        
+        let CurrentPnLStateBodyParams {user_id, symbol, start_trade_date, end_trade_date, pnl_congiguration_id, current_pnl_state_id}  = current_pnl_state_params;
+        
+
+        
         let mut filter:Document = doc!{};
         let mut current_pnl_states: Option<Vec<CurrentPnLState>> = None;
-        if pnl_congiguration_id.is_some() && symbol.is_some() && start_trade_date.is_some(){
+        if current_pnl_state_id.is_some() && symbol.is_some() && start_trade_date.clone().is_some(){
             let (current_pnl_cache_key,_ ) =
-            Self::get_current_pnl_cache_key(start_trade_date.unwrap().as_str(), symbol.clone().unwrap().as_str(), pnl_congiguration_id.unwrap().to_string().as_str());
+            Self::get_current_pnl_cache_key(start_trade_date.unwrap().as_str(), symbol.clone().unwrap().as_str(), current_pnl_state_id.unwrap().to_string().as_str());
             let current_pnl_state = Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), only_via_redis).await;
             if current_pnl_state.is_some(){
                 let current_pnl_state = current_pnl_state.unwrap();
@@ -321,27 +432,35 @@ impl CurrentPnLState {
             }
             return None
         }
-        if end_trade_date.is_some(){
-            println!("fetch_current_pnl_state => end_trade_date is {:?}", end_trade_date);
-            filter = doc! {
+        println!("start_trade_date: {:?}", start_trade_date.clone());
+        if start_trade_date.is_some(){
+            let trade_date = start_trade_date.clone().unwrap();
+            filter.insert("start_trade_date", doc! {
                 "start_trade_date": {
-                    "$gte": start_trade_date,
-                    "$lte": end_trade_date.clone().unwrap()
+                    "$gte": trade_date.clone(),
+                    "$lte": trade_date
                 }
-            };
+            });
             
         } 
+
+        if end_trade_date.is_some(){
+            let trade_date = end_trade_date.clone().unwrap();
+            filter.insert("end_trade_date", doc! {
+                "end_trade_date": {
+                    "$gte": trade_date.clone(),
+                    "$lte": trade_date
+                }
+              });
+        }
+
         if pnl_congiguration_id.is_some(){
-            filter = doc! {
-                "pnl_configuration_id": ObjectId::from_str(pnl_congiguration_id.clone().unwrap().as_str()).unwrap(),
-            };
-
-            
+            filter.insert("pnl_configuration_id", ObjectId::from_str(pnl_congiguration_id.clone().unwrap().as_str()).unwrap()); 
         }
 
-        if pnl_congiguration_id.is_none() && end_trade_date.is_none(){
-            return None;
-        }
+        // if pnl_congiguration_id.is_none() && end_trade_date.is_none(){
+        //     return None;
+        // }
 
         if symbol.is_some(){
             filter.insert("symbol", symbol.clone());
@@ -349,6 +468,10 @@ impl CurrentPnLState {
 
         if user_id.is_some(){
             filter.insert("user_id", ObjectId::from_str(user_id.clone().unwrap().as_str()).unwrap());
+        }
+
+        if current_pnl_state_id.is_some(){
+            filter.insert("_id", ObjectId::from_str(current_pnl_state_id.clone().unwrap().as_str()).unwrap());
         }
 
         let options = FindOptions::builder().build();
@@ -376,15 +499,16 @@ impl CurrentPnLState {
         close_order: &Order,
     ) -> () {
 
-        let pnl_configurations = PnLConfiguration::fetch_current_pnl_configuration(None, Some(close_order.user_id.to_string()),Some(close_order.symbol.clone()) ).await;
+        // let pnl_configurations = PnLConfiguration::fetch_current_pnl_configuration(None, None, None, Some(close_order.current_pnl_state_id.clone().to_string())).await;
 
-        if pnl_configurations.is_none() {
-            println!("update_current_pnl_state_via_order => No PnL configuration found for the user {}", close_order.user_id.to_string());
-            return ();
-        }
-        let pnl_configuration = pnl_configurations.unwrap()[0].clone();
+        // if pnl_configurations.is_none() {
+        //     println!("update_current_pnl_state_via_order => No PnL configuration found for the current_pnl_state_id {}", close_order.current_pnl_state_id.to_string());
+        //     return ();
+        // }
+        // let pnl_configuration = pnl_configurations.unwrap()[0].clone();
+       
         let (current_pnl_cache_key, current_pnl_cache_algo_types_key ) =
-            Self::get_current_pnl_cache_key(close_order.raw_stock.date.as_str(), close_order.symbol.as_str(), pnl_configuration.id.to_string().as_str());
+            Self::get_current_pnl_cache_key(close_order.raw_stock.date.as_str(), close_order.symbol.as_str(), close_order.current_pnl_state_id.to_string().as_str());
 
         let current_pnl_state_option =
             Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), true).await;
@@ -502,14 +626,14 @@ impl CurrentPnLState {
 
     }
 
-    pub fn get_current_pnl_cache_key(stock_date: &str, symbol: &str, pnl_configuration_id: &str) -> (String, String) {
+    pub fn get_current_pnl_cache_key(stock_date: &str, symbol: &str, current_pnl_state_id: &str) -> (String, String) {
         let static_stock_date = DateTime::parse_from_str(stock_date, "%Y-%m-%d %H:%M:%S%z")
             .unwrap()
             .to_string(); //TODO: remove static date once live market data is available
         let trade_date_only =
             date_parser::return_only_date_from_datetime(static_stock_date.as_str());
-        let cache_key = utils::current_pnl_state_cache_key_formatted(trade_date_only.as_str(), symbol, pnl_configuration_id);
-        let cache_key_algo_types = utils::current_pnl_state_cache_key_algotypes_formatted(trade_date_only.as_str(), pnl_configuration_id);
+        let cache_key = utils::current_pnl_state_cache_key_formatted(trade_date_only.as_str(), symbol, current_pnl_state_id);
+        let cache_key_algo_types = utils::current_pnl_state_cache_key_algotypes_formatted(trade_date_only.as_str(), current_pnl_state_id);
         (cache_key, cache_key_algo_types)
     }
 
@@ -560,6 +684,7 @@ impl CurrentPnLState {
             "symbol": self.symbol.to_string(),
             "trading_algo_types": trading_algo_types_doc,
             "time_frame": self.time_frame.to_string(),
+            "_id": self.id.clone(),
             "created_at": self.created_at.to_string(),
             "updated_at": self.updated_at.to_string(),
             "user_id": self.user_id.clone(),
@@ -667,6 +792,7 @@ impl PnLConfiguration {
         let max_trade_capital = 4000000.0;
         let user_id = ObjectId::from_str(STATIC_USER_ID).unwrap();
         let id = ObjectId::new();
+        println!("id => {:?}", id.clone());
         let is_backtest_config = true;
         let new_pnl_configuration = PnLConfiguration::new(
             created_at,
@@ -710,11 +836,37 @@ impl PnLConfiguration {
     }
 
     
-    pub async fn fetch_current_pnl_configuration(pnl_configuration_id: Option<String>, user_id: Option<String>, symbol: Option<String>) -> Option<Vec<PnLConfiguration>>{
+    pub async fn fetch_current_pnl_configuration(pnl_configuration_id: Option<String>, user_id: Option<String>, symbol: Option<String>, current_pnl_state_id: Option<String>) -> Option<Vec<PnLConfiguration>>{
         let pnl_configuration_collection = Self::get_pnl_configuration_collection().await;
         let mut filter = doc! {};
 
-        if pnl_configuration_id.is_none() && user_id.is_none() && symbol.is_none(){
+        //Special case where we need to find the pnl configuration from the current pnl state
+        if current_pnl_state_id.is_some(){
+            
+            let current_pnl_state_params  = CurrentPnLStateBodyParams{
+                user_id: None,
+                symbol: None,
+                start_trade_date: None,
+                end_trade_date: None,
+                pnl_congiguration_id: None,
+                current_pnl_state_id: Some(current_pnl_state_id.clone().unwrap().to_string())
+            };
+            let only_via_redis = false;
+
+            let current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_params, only_via_redis).await;
+
+            if current_pnl_states.is_none(){
+                return None;
+            }
+
+            if current_pnl_states.is_some(){
+                let current_pnl_state = current_pnl_states.unwrap()[0].clone();
+                filter.insert("_id", current_pnl_state.pnl_configuration_id);
+            }
+
+        }
+        
+        if pnl_configuration_id.is_none() && user_id.is_none() && symbol.is_none() && current_pnl_state_id.is_none(){
             return None;
         }
 

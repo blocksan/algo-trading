@@ -27,13 +27,14 @@ pub struct TradeSignal{
     pub trade_target: f32,
     pub qty: i32,
     pub total_price: f32,
+    pub current_pnl_state_id: ObjectId,
     #[serde(rename = "_id")]
     pub id: ObjectId,
     pub algo_id: ObjectId,
 }
 
 impl TradeSignal{
-    pub fn new(raw_stock: RawStock,trade_position_type: TradeType, trade_algo_type: AlgoTypes, created_at: String,  entry_price: f32, trade_sl: f32, trade_target: f32, qty: i32, total_price: f32, id: ObjectId, algo_id: ObjectId ) -> TradeSignal {
+    pub fn new(raw_stock: RawStock,trade_position_type: TradeType, trade_algo_type: AlgoTypes, created_at: String,  entry_price: f32, trade_sl: f32, trade_target: f32, qty: i32, total_price: f32,current_pnl_state_id: ObjectId, id: ObjectId, algo_id: ObjectId ) -> TradeSignal {
         TradeSignal {
             raw_stock,
             trade_position_type,
@@ -44,6 +45,7 @@ impl TradeSignal{
             trade_target,
             qty,
             total_price,
+            current_pnl_state_id,
             id,
             algo_id
         }
@@ -61,7 +63,8 @@ impl TradeSignal{
         &self.created_at
     }
 
-    pub fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32, algo_id: ObjectId ) -> Option<TradeSignal> {
+    pub fn create_trade_signal(symbol: String, date: String, close: f32, high:f32, low:f32, open:f32, volume:i32, market_time_frame: TimeFrame, trade_position_type: TradeType, algo_type: AlgoTypes, entry_price: f32, trade_sl: f32, trade_target: f32, algo_id: ObjectId, current_pnl_state_id: ObjectId ) -> Option<TradeSignal> {
+        let trade_signal_id = ObjectId::new();
         let trade_signal = TradeSignal::new(
             RawStock::new(
                 symbol,
@@ -81,10 +84,12 @@ impl TradeSignal{
             trade_target,
             QTY,
             entry_price*QTY as f32,
-            ObjectId::new(),
+            current_pnl_state_id,
+            trade_signal_id.clone(),
             algo_id
 
         );
+        println!("trade_signal_id: {:?}", trade_signal_id.clone());
         Some(trade_signal)
     }
 
@@ -160,6 +165,7 @@ impl TradeSignalsKeeper{
     }
 
     pub async fn add_trade_signal(&mut self, trade_signal: &TradeSignal) {
+        println!("trade_signal: {:?}", trade_signal.clone());
         let trade_signal_collection = TradeSignal::get_trade_signal_collection().await;
         match trade_signal_collection.insert_one(trade_signal.clone(), None).await{
             Ok(_) => {

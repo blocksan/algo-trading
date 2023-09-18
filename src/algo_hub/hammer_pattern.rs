@@ -47,6 +47,7 @@ pub struct HammerCandle {
     pub is_hammer: bool,
     pub body_size_ratio: f32,
     pub created_at: String,
+    pub curren_pnl_state_id: ObjectId,
     #[serde(rename = "_id")]
     pub id: ObjectId,
     // pub _id : String, //MongoDB ID => Initialized with empty string, will be updated when inserted into DB
@@ -65,6 +66,7 @@ impl HammerCandle {
         is_hammer: bool,
         body_size_ratio: f32,
         created_at: String,
+        curren_pnl_state_id: ObjectId,
         id: ObjectId,
     ) -> HammerCandle {
         HammerCandle {
@@ -80,6 +82,7 @@ impl HammerCandle {
             is_hammer,
             body_size_ratio,
             created_at,
+            curren_pnl_state_id,
             id
         }
     }
@@ -191,7 +194,7 @@ impl HammerPatternUtil {
         self.hammer_pattern_ledger.clone()
     }
 
-    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock) -> Option<TradeSignal> {
+    pub async fn calculate_and_add_ledger(&mut self, stock: &RawStock, current_pnl_state_id: Option<String>) -> Option<TradeSignal> {
         
         let (is_hammer_candle, calculated_body_size, is_green_candle) =
         HammerPatternUtil::calculate_candle_metadata(stock).await;
@@ -211,6 +214,7 @@ impl HammerPatternUtil {
                 is_hammer_candle,
                 calculated_body_size,
                 date_parser::new_current_date_time_in_desired_stock_datetime_format(),
+                current_pnl_state_id.clone().unwrap().parse::<ObjectId>().unwrap(),
                 ObjectId::new()
             );
             let hammer_candle_collection = HammerCandle::get_hammer_candles_collection().await;
@@ -372,45 +376,47 @@ impl HammerPatternUtil {
 
     
     pub fn analyse_and_create_trading_signal(&mut self) -> Option<TradeSignal> {
-        let previous_hammer_candle_exists = self.hammer_pattern_ledger.last();
-        if previous_hammer_candle_exists.is_none()  {
+        let hammer_candle_exists = self.hammer_pattern_ledger.last();
+        if hammer_candle_exists.is_none()  {
             return None;
         }   
 
-        let previous_hammer_candle = previous_hammer_candle_exists.unwrap();
+        let hammer_candle = hammer_candle_exists.unwrap();
 
-        if date_parser::new_current_date_time_in_desired_stock_datetime_format() < previous_hammer_candle.date  {
+        let HammerCandle {id, is_green_candle, open, close, high, low, date, volume, market_time_frame, symbol, is_hammer:_, body_size_ratio:_, created_at:_, curren_pnl_state_id} = hammer_candle;
+
+        if date_parser::new_current_date_time_in_desired_stock_datetime_format() < date.clone() {
             return None;
         }
 
-        let (trade_position_type, entry_price, trade_sl, trade_target) = match previous_hammer_candle.is_green_candle {
+        let (trade_position_type, entry_price, trade_sl, trade_target) = match is_green_candle {
             true => {
-                let lower_wick = previous_hammer_candle.open-previous_hammer_candle.low;
-                let entry_price = previous_hammer_candle.close-(*HAMMER_SL_MARGIN_POINTS);
+                let lower_wick = open-low;
+                let entry_price = close-(*HAMMER_SL_MARGIN_POINTS);
                 let trade_sl = entry_price-(lower_wick+(*HAMMER_SL_MARGIN_POINTS));
                 let trade_target = entry_price+(lower_wick*(*HAMMER_TARGET_MARGIN_MULTIPLIER));
                 (TradeType::Long, entry_price, trade_sl, trade_target)
             }, //2 points below the close price can be a good entry point
-                // return_2_precision_for_float(previous_hammer_candle.close*0.95)), //95% of the close price can be a good entry point
+                // return_2_precision_for_float(close*0.95)), //95% of the close price can be a good entry point
             false => {
-                let lower_wick = previous_hammer_candle.close-previous_hammer_candle.low;
-                let entry_price = previous_hammer_candle.open-(*HAMMER_SL_MARGIN_POINTS);
+                let lower_wick = close-low;
+                let entry_price = open-(*HAMMER_SL_MARGIN_POINTS);
                 let trade_sl = entry_price-(lower_wick+(*HAMMER_SL_MARGIN_POINTS));
                 let trade_target = entry_price+((lower_wick+(*HAMMER_SL_MARGIN_POINTS))*(*HAMMER_TARGET_MARGIN_MULTIPLIER));
                 (TradeType::Long, entry_price, trade_sl, trade_target)
             }
-                // return_2_precision_for_float(previous_hammer_candle.open*0.95)) //95% of the open price can be a good entry point
+                // return_2_precision_for_float(open*0.95)) //95% of the open price can be a good entry point
         }; //hammer candle always going to give long trades
 
         //TODO: read current market state, analyse and decide whether to take the trade or not
         //like: if market is in downtrend, then don't take the trade or 5 EMA is below 20 EMA, then don't take the trade, etc...
 
-        // let candle = previous_hammer_candle.clone();
+        // let candle = clone();
         if entry_price > 0.0 {
             // let trade_sl = return_2_precision_for_float(entry_price*0.95); //5% SL
             // let trade_target = return_2_precision_for_float(entry_price*1.10); //10% Target
             // self.hammer_pattern_ledger.pop();
-            match TradeSignal::create_trade_signal(previous_hammer_candle.symbol.clone(), previous_hammer_candle.date.clone(), previous_hammer_candle.close, previous_hammer_candle.high,previous_hammer_candle. low, previous_hammer_candle.open, previous_hammer_candle.volume,previous_hammer_candle.market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target, previous_hammer_candle.id) {
+            match TradeSignal::create_trade_signal(symbol.clone(), date.clone(), close.clone(), high.clone(), low.clone(), open.clone(), volume.clone(),market_time_frame.clone(),trade_position_type, AlgoTypes::HammerPatternAlgo, entry_price, trade_sl, trade_target, *id, *curren_pnl_state_id) {
                 Some(trade_signal) => {
                     Some(trade_signal)
                 },

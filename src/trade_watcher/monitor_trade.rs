@@ -82,13 +82,13 @@ pub async fn check_for_exit_opportunity(order_manager: &mut OrderManager, stock:
             }
             let closed_order = if exit_price > 0.0{
 
-                order_manager.close_executed_order( order, exit_price, redis_client).await
+                order_manager.close_executed_order( order, exit_price,  stock.clone(), redis_client).await
                 // println!("updated order: {:?} for index {}", closed_order, index);
                 
                 
                 // break;
             }else if if_first_time_greater_than_second_time( Some(return_only_time_from_datetime(Some(stock.date.clone()))), THRESHOLD_TRADE_END_TIME){
-               order_manager.close_executed_order( order, stock.close, redis_client).await
+               order_manager.close_executed_order( order, stock.close, stock.clone(), redis_client).await
                 // println!("updated order: {:?} for index {}", closed_order, index);
                 
                 // println!("shared order after update at index: {:?} values => {:?}",index, shared_orders[index]);

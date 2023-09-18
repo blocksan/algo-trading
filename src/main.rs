@@ -355,7 +355,6 @@ async fn main() {
                                         trade_keeper.clone(),
                                         order_manager.clone(),
                                         redis_client.clone(),
-                                        None,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;

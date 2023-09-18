@@ -20,8 +20,7 @@ impl AlgoBacktester {
     pub async fn initiate_the_backtest(&self) -> Option<String>{
         println!("AlgoBacktester initiated with pnl_configuration_id: {}", self.pnl_configuration_id);
         let result = backtest_strategy(self.pnl_configuration_id.clone()).await;
-        println!("AlgoBacktester result: {:?}", result);
-        None
+        result
     }
 
     pub async fn create_static_pnl_config() -> Option<Vec<PnLConfiguration>>{

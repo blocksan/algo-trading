@@ -49,7 +49,7 @@ lazy_static! {
 }
 
 // #[tokio::main]
-pub async fn backtest_strategy(pnl_configuration_id: String) {
+pub async fn backtest_strategy(pnl_configuration_id: String) -> Option<String> {
     // let pnl_configuration_id = "6500bda2b5fbcf0f36cf3f7e";
 
     let start_time = Instant::now();
@@ -135,7 +135,8 @@ pub async fn backtest_strategy(pnl_configuration_id: String) {
                 symbol: None,
                 end_trade_date: None,
                 pnl_congiguration_id: Some(pnl_configuration_id.clone()),
-                user_id: None
+                user_id: None,
+                current_pnl_state_id: None
             };
             let current_pnl_states_option = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_params, false).await;
             
@@ -164,7 +165,7 @@ pub async fn backtest_strategy(pnl_configuration_id: String) {
 
                     for raw_stock in raw_stocks.unwrap().into_iter(){
                         {
-                            // let current_pnl_state_patams = CurrentPnLStateBodyParams {
+                            // let current_pnl_state_params = CurrentPnLStateBodyParams {
                             //     start_trade_date: pnl_configuration.start_trade_date.clone(),
                             //     symbol: symbol.clone(),
                             //     end_trade_date: None,
@@ -208,14 +209,14 @@ pub async fn backtest_strategy(pnl_configuration_id: String) {
                                         &raw_stock_ledger,
                                     )
                                     .await;
-                                    algo_dispatcher::ingest_raw_stock_data(
+                                    algo_dispatcher::backtest_ingest_raw_stock_data(
                                         &raw_stock,
                                         tradeable_algo_types.clone(),
                                         hammer_ledger.clone(),
                                         trade_keeper.clone(),
                                         order_manager.clone(),
                                         redis_client.clone(),
-                                        Some(current_pnl_state.pnl_configuration_id.to_string()),
+                                        current_pnl_state.id.to_string(),
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
@@ -251,16 +252,16 @@ pub async fn backtest_strategy(pnl_configuration_id: String) {
         "Total Time Taken: {:?}",
         end_time.duration_since(start_time)
     );
-    return;
+    return Some(format!("Backtest completed with Total Time Taken: {:?}", end_time.duration_since(start_time)))
 }
 
 
 pub async fn create_static_pnl_config() -> Option<Vec<PnLConfiguration>>{
     PnLConfiguration::new_static_backtest_config().await;
-    let pnl_configuration = PnLConfiguration::fetch_current_pnl_configuration(None, Some(STATIC_USER_ID.to_string()), None).await;
+    let pnl_configuration = PnLConfiguration::fetch_current_pnl_configuration(None, Some(STATIC_USER_ID.to_string()), None, None).await;
     pnl_configuration
 }
 
 pub async fn create_curren_pnl_states(pnl_configurations: Option<Vec<PnLConfiguration>>) -> Option<String>{
-    CurrentPnLState::create_current_pnl_states(pnl_configurations).await
+    CurrentPnLState::backtest_create_current_pnl_states(pnl_configurations).await
 }

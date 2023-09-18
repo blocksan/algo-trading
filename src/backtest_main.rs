@@ -277,7 +277,7 @@ pub async fn main() {
                         {
                             // let text = message.to_text().unwrap();
 
-                            // let current_pnl_state_patams = CurrentPnLStateBodyParams {
+                            // let current_pnl_state_params = CurrentPnLStateBodyParams {
                             //     start_trade_date: pnl_configuration.start_trade_date.clone(),
                             //     symbol: symbol.clone(),
                             //     end_trade_date: None,
@@ -380,7 +380,7 @@ pub async fn main() {
                                         &raw_stock_ledger,
                                     )
                                     .await;
-// let current_pnl_state_patams = CurrentPnLStateBodyParams {
+// let current_pnl_state_params = CurrentPnLStateBodyParams {
                             //     start_trade_date: pnl_configuration.start_trade_date.clone(),
                             //     symbol: symbol.clone(),
                             //     end_trade_date: None,
@@ -441,14 +441,14 @@ pub async fn main() {
                     
 
                     
-                    // let temp = current_pnl_state_patams.clone();
+                    // let temp = current_pnl_state_params.clone();
                     //Info: creation of the current_pnl_states will happen while fetching the current_pnl_state for that stock
-                    // let mut current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_patams.clone(), false).await;
+                    // let mut current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_params.clone(), false).await;
                     // if current_pnl_states.is_none(){
                     //     println!("No Current PnL State found for user_id: {}", user_id);
 
                     //     CurrentPnLState::new_static_current_pnl_state(symbol.unwrap().as_str(), pnl_configuration.id.to_string().as_str(), pnl_configuration.start_trade_date.as_str(), pnl_configuration.end_trade_date.as_str()).await;
-                    //     current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_patams, false).await;
+                    //     current_pnl_states = CurrentPnLState::fetch_current_pnl_state(current_pnl_state_params, false).await;
                     //     if current_pnl_states.is_none(){
                     //         println!("Still No Current PnL State found for user_id: {}", user_id);
                     //         continue;

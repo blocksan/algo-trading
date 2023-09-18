@@ -25,7 +25,7 @@ use futures::TryStreamExt;
 pub struct OrderBodyParams{
     pub start_trade_date: String,
     pub end_trade_date: Option<String>,
-    pub user_id: String,
+    pub current_pnl_state_id: String,
     pub trade_position_type: Option<TradeType>,
     pub trade_algo_type: Option<AlgoTypes>,
     pub is_trade_open: Option<bool>,
@@ -63,7 +63,7 @@ pub struct Order {
     pub algo_id: ObjectId,
     pub trade_signal_id: ObjectId,
     pub raw_stock: RawStock,
-    pub user_id: ObjectId,
+    pub current_pnl_state_id: ObjectId,
 }
 
 impl Order {
@@ -93,7 +93,7 @@ impl Order {
         algo_id: ObjectId,
         trade_signal_id: ObjectId,
         raw_stock: RawStock,
-        user_id: ObjectId,
+        current_pnl_state_id: ObjectId,
     ) -> Order {
         Order {
             symbol,
@@ -121,7 +121,7 @@ impl Order {
             algo_id,
             trade_signal_id,
             raw_stock,
-            user_id,
+            current_pnl_state_id,
         }
     }
 
@@ -173,7 +173,7 @@ impl Order {
                 "volume": self.raw_stock.volume,
                 "market_time_frame": self.raw_stock.market_time_frame.to_string()
             },
-            "user_id": self.user_id.clone(),
+            "current_pnl_state_id": self.current_pnl_state_id.clone(),
         }
     }
 }
@@ -202,7 +202,7 @@ impl OrderManager {
         redis_client: &Mutex<RedisClient>,
         shared_order_ledger: &mut Vec<Order>,
     ) -> () {
-        println!("Checking and dispatching order for symbol {:?}", trade_signal.raw_stock.date.clone());
+        println!("Checking and dispatching order at {:?}", trade_signal.raw_stock.date.clone());
         let users = User::get_all_active_users().await;
         let mut dispatched_orders: Vec<Order> = vec![];
         for user in users {
@@ -369,11 +369,181 @@ impl OrderManager {
         drop(shared_order_ledger);
     }
 
+    pub async fn backtest_check_and_dispatch_order(
+        &mut self,
+        trade_signal: TradeSignal,
+        redis_client: &Mutex<RedisClient>,
+        shared_order_ledger: &mut Vec<Order>,
+    ) -> () {
+        let current_pnl_state_id = trade_signal.current_pnl_state_id.clone();
+        let mut dispatched_orders: Vec<Order> = vec![];
+            
+            let (current_pnl_cache_key, current_pnl_cache_algo_types_key ) = CurrentPnLState::get_current_pnl_cache_key(
+                trade_signal.raw_stock.date.as_str(),
+                &trade_signal.raw_stock.symbol,
+                &current_pnl_state_id.clone().to_string()
+            );
+
+            let current_pnl_user_algo_types_options = CurrentPnLState::fetch_current_pnl_algo_types_of_user(
+                current_pnl_cache_algo_types_key.as_str(),
+            );
+
+            if current_pnl_user_algo_types_options.is_none(){
+                println!("No {} algo types found for the current_pnl_state_id {}", trade_signal.trade_algo_type, current_pnl_state_id.to_string());
+                return;
+            }
+
+            let current_pnl_user_algo_types = current_pnl_user_algo_types_options.unwrap();
+           
+            if !current_pnl_user_algo_types.contains(&trade_signal.trade_algo_type) {
+                println!("No tradeable {} algo types set for the current_pnl_state_id {}", trade_signal.trade_algo_type, current_pnl_state_id.clone().to_string());
+                return ();
+            }
+
+
+            let order_cache_key = utils::order_cache_key_formatter(
+                &trade_signal.raw_stock.symbol,
+                &trade_signal.trade_algo_type,
+                &current_pnl_state_id.to_string(),
+            );
+
+            
+            let order_exists = OrderManager::check_if_open_order_exists(
+                order_cache_key.as_str(),
+                redis_client,
+            )
+            .await;
+
+            if order_exists {
+                println!(
+                    "Order already exists for {} with algo type {}",
+                    trade_signal.raw_stock.symbol,
+                    trade_signal.trade_algo_type.to_string()
+                );
+                ()
+            } else {
+                let order = Order::new(
+                    trade_signal.raw_stock.symbol.clone(),
+                    trade_signal.trade_position_type.clone(),
+                    trade_signal.trade_algo_type.clone(),
+                    trade_signal.entry_price,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    trade_signal.trade_sl,
+                    trade_signal.trade_target,
+                    true, //will be updated to false once the order is executed (order exited at exit price) on the exchange ie. Zerodha
+                    false, //will be updated to true once the order is executed (order executed at entry price) on the exchange ie. Zerodha
+                    trade_signal.qty,
+                    trade_signal.total_price,
+                    new_current_date_time_in_desired_stock_datetime_format(),
+                    "".to_string(),
+                    "".to_string(),
+                    Uuid::new_v4().to_string(),
+                    order_cache_key.clone(), //This is the order id which will be generated by the Zerodha API once the order is placed
+                    0.0,
+                    false,
+                    trade_signal.algo_id.clone(),
+                    trade_signal.id.clone(),
+                    trade_signal.raw_stock.clone(),
+                    current_pnl_state_id,
+                );
+                
+
+                let (is_order_tradeable, current_pnl_state, not_eligible_trading_reason) =
+                    OrderManager::check_if_order_is_tradeable(
+                        redis_client,
+                        current_pnl_cache_key.as_str(),
+                        &order,
+                        current_pnl_cache_algo_types_key.as_str(),
+                    ).await;
+
+                if !is_order_tradeable {
+                    println!(
+                    "Order for symbol {} is not tradeable due to {}",
+                    trade_signal.raw_stock.symbol,
+                    not_eligible_trading_reason,
+                );
+                    return;
+                }
+
+                if current_pnl_state.is_none() {
+                    println!(
+                    "Order is not tradeable for {} with algo type {} as current PnL state is not available",
+                    trade_signal.raw_stock.symbol,
+                    trade_signal.trade_algo_type.to_string()
+                );
+                    return;
+                }
+
+                let order_collection = OrderManager::get_order_collection().await;
+                //TODO:: add logic to call the Zerodha API to place the order
+                match order_collection.insert_one(order.clone(), None).await {
+                    Ok(_) => {
+                        println!("Order added to the database");
+                        match redis_client.lock().unwrap().set_data(
+                            order.order_id.as_str(),
+                            serde_json::to_string(&order.clone()).unwrap().as_str(),
+                        ) {
+                            Ok(_) => {
+                                // println!("Order added in Redis for key => {}", order.order_id);
+                            }
+                            Err(e) => {
+                                println!("Error while adding order in Redis => {:?}", e);
+                            }
+                        }
+
+                        match redis_client
+                            .lock()
+                            .unwrap()
+                            .set_data(order_cache_key.as_str(), "true")
+                        {
+                            Ok(_) => {
+                                // println!("Order cache key added in Redis for key => {}", order_cache_key);
+                            }
+                            Err(e) => {
+                                println!("Error while adding order cache key in Redis => {:?}", e);
+                            }
+                        }
+
+                        let mut updated_current_pnl_state = current_pnl_state.unwrap();
+                        updated_current_pnl_state.current_trade_count += 1;
+                        updated_current_pnl_state.current_used_trade_capital += order.total_price;
+
+                        match redis_client.lock().unwrap().set_data(
+                            current_pnl_cache_key.as_str(),
+                            serde_json::to_string(&updated_current_pnl_state)
+                                .unwrap()
+                                .as_str(),
+                        ) {
+                            Ok(_) => {
+                                // println!("Order cache key added in Redis for key => {}", order_cache_key);
+                            }
+                            Err(e) => {
+                                println!("Error while adding order cache key in Redis => {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error while adding order to the database {}", e);
+                    }
+                }
+                // self.orders.push(order.clone());
+                dispatched_orders.push(order.clone());
+                // shared_order_ledger.push(order.clone());
+                // ()
+            }
+        shared_order_ledger.extend(dispatched_orders);
+        drop(shared_order_ledger);
+    }
+
     pub async fn fetch_orders(order_params: OrderBodyParams) -> Option<Vec<Order>> {
         let OrderBodyParams {
             start_trade_date,
             end_trade_date,
-            user_id,
+            current_pnl_state_id,
             trade_position_type,
             trade_algo_type,
             is_trade_open,
@@ -383,7 +553,7 @@ impl OrderManager {
             total_price_operator
         } = order_params;
         let mut filter = doc! {
-            "user_id": ObjectId::from_str(user_id.as_str()).unwrap(),
+            "current_pnl_state_id": ObjectId::from_str(current_pnl_state_id.as_str()).unwrap(),
             "order_placed_at": {
                 "$gte": start_trade_date,
                 "$lte": end_trade_date.unwrap_or(new_current_date_time_in_desired_stock_datetime_format())
@@ -493,6 +663,7 @@ impl OrderManager {
         &mut self,
         order: &Order,
         exit_price: f32,
+        stock: RawStock,
         redis_client: &Mutex<RedisClient>,
     ) -> Option<Order> {
         let (closing_profit, is_profitable_trade) =
@@ -524,8 +695,8 @@ impl OrderManager {
             is_profitable_trade,
             order.algo_id.clone(),
             order.trade_signal_id.clone(),
-            order.raw_stock.clone(),
-            order.user_id,
+            stock,
+            order.current_pnl_state_id,
         );
         let order_cache_key = order.order_cache_key.clone();
 
@@ -619,7 +790,7 @@ impl OrderManager {
             order.algo_id.clone(),
             order.trade_signal_id.clone(),
             order.raw_stock.clone(),
-            order.user_id,
+            order.current_pnl_state_id,
         );
 
         let order_cache_key = order.order_cache_key.clone();
