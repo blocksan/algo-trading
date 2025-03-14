@@ -17,10 +17,18 @@ Algo Trading is a Rust project that enables algorithmic trading by providing var
   - [Backtest Stock](#backtest-stock)
 - [Technical Stack](#technical-stack)
 - [Data Flow](#data-flow)
+- [Market Data & Technical Indicators](#market-data--technical-indicators)
+  - [Supported Markets](#supported-markets)
+  - [Basic Market Data](#basic-market-data)
+  - [Technical Indicators](#technical-indicators)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
+  - [Configuration](#configuration)
 - [Usage](#usage)
+  - [Running the System](#running-the-system)
+  - [Backtesting](#backtesting)
+  - [Monitoring](#monitoring)
 - [Future Development](#future-development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -135,25 +143,189 @@ This allows testing of trading strategies on historical data before deploying th
 6. The trade watcher monitors active trades for exit conditions
 7. When exit conditions are met, trades are closed and profit/loss is calculated
 
+## Market Data & Technical Indicators
+
+### Supported Markets
+
+The system is designed to work with Indian stock market data, including:
+
+**Indices:**
+- NIFTY 50
+- NIFTY BANK
+
+**Stocks:**
+A wide range of Indian stocks including but not limited to:
+- RELIANCE, TCS, HDFC, ICICIBANK, INFY
+- SBIN, ADANIPORTS, BHARTIARTL, HINDUNILVR
+- And many more (over 100 stocks supported)
+
+### Basic Market Data
+
+For each security, the system processes the following fundamental data points:
+
+- **Date** - Date of observation
+- **Open** - Opening price of the security on a particular day
+- **High** - Highest price reached during the trading session
+- **Low** - Lowest price reached during the trading session
+- **Close** - Closing price of the security on a particular day
+- **Volume** - Number of shares traded
+
+### Technical Indicators
+
+The system calculates and utilizes a comprehensive set of technical indicators for analysis:
+
+#### Moving Averages
+- **Simple Moving Average (SMA)** - Average of prices over specific periods (5, 10, 15, 20 days)
+- **Exponential Moving Average (EMA)** - Weighted average giving more importance to recent prices (5, 10, 15, 20 days)
+- **Triangular Moving Average (TRIMA)** - Weighted average with more weight on middle portion (5, 10, 20 days)
+- **Kaufman Adaptive Moving Average (KAMA)** - Adapts to price volatility (10, 20, 30 days)
+- **Hilbert Transform - Instantaneous Trendline (HT_TRENDLINE)** - Reduces noise without lag
+
+#### Volatility Indicators
+- **Bollinger Bands** - Upper, middle, and lower bands based on standard deviations
+- **Average True Range (ATR)** - Measures market volatility
+- **True Range (Trange)** - Maximum of price ranges for volatility measurement
+
+#### Momentum Indicators
+- **Moving Average Convergence/Divergence (MACD)** - Various combinations (5-10, 5-20, 10-20, 15-20, 12-26)
+- **Relative Strength Index (RSI)** - Momentum oscillator (8 and 14 periods)
+- **Momentum (MOM)** - Rate of price change (10, 15, 20 periods)
+- **Rate of Change (ROC)** - Percentage price change (5, 10, 20 periods)
+
+#### Oscillators
+- **Commodity Channel Index (CCI)** - Identifies cyclical trends (5, 10, 15 periods)
+- **Absolute Price Oscillator (APO)** - Difference between two EMAs
+- **Percentage Price Oscillator (PPO)** - Percentage difference between two EMAs
+- **Ultimate Oscillator (ULTOSC)** - Multi-timeframe momentum oscillator
+- **Williams %R (WILLR)** - Identifies overbought/oversold conditions
+
+#### Stochastic Indicators
+- **Stochastic Oscillator** - Compares closing price to price range
+  - Slow K and D values
+  - Fast K and D values
+  - Stochastic RSI K and D values
+
+#### Trend Indicators
+- **Average Directional Movement Index (ADX)** - Measures trend strength (5, 10, 20 periods)
+- **Parabolic SAR (SAR)** - Identifies potential trend reversals
+
+#### Other Indicators
+- **Typical Price (TYPPRICE)** - Average of high, low, and close
+- **Hilbert Transform - Dominant Cycle Period (HT_DCPERIOD)** - Estimates market cycles
+- **Beta** - Measures volatility relative to the market
+
+These technical indicators are used by the trading algorithms to identify patterns, generate signals, and make trading decisions across different timeframes.
+
+For more detailed information on these indicators, refer to the [TA-Lib documentation](https://mrjbq7.github.io/ta-lib/).
+
 ## Getting Started
 
 ### Prerequisites
 
-List any prerequisites required for setting up and running the project. This could include Rust installation, required libraries, or tools.
-
 Required dependencies:
-- Rust (2021 edition)
-- MongoDB
-- Redis
-- Tokio runtime
+- Rust (2021 edition) - Install via [rustup](https://rustup.rs/)
+- MongoDB (4.4+) - [Installation guide](https://docs.mongodb.com/manual/installation/)
+- Redis (6.0+) - [Installation guide](https://redis.io/topics/quickstart)
+- Tokio runtime (included in dependencies)
 
 ### Installation
 
-Provide step-by-step instructions on how to set up and install the project. Include any commands or configurations needed.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/algo-trading.git
+   cd algo-trading
+   ```
+
+2. Install Rust dependencies:
+   ```bash
+   cargo build
+   ```
+
+3. Start MongoDB:
+   ```bash
+   # Start MongoDB service
+   sudo systemctl start mongod    # Linux
+   brew services start mongodb-community    # macOS
+   ```
+
+4. Start Redis:
+   ```bash
+   # Start Redis service
+   sudo systemctl start redis    # Linux
+   brew services start redis    # macOS
+   ```
+
+### Configuration
+
+1. Configure MongoDB connection:
+   - The default connection string is `mongodb://localhost:27017`
+   - The default database name is `algo_trading`
+   - These can be modified in `src/main.rs`
+
+2. Configure WebSocket servers:
+   - The system connects to WebSocket servers for different timeframes
+   - Default URLs are:
+     - 1-minute data: `ws://localhost:5554`
+     - 5-minute data: `ws://localhost:5556`
+   - These can be modified in the `thread_worker_configs` in `src/main.rs`
 
 ## Usage
 
-Explain how to use the services provided by the project. Provide code examples, command-line usage, or screenshots if applicable.
+### Running the System
+
+1. Start the main application:
+   ```bash
+   cargo run
+   ```
+
+2. Run in release mode for better performance:
+   ```bash
+   cargo run --release
+   ```
+
+3. Run with specific features:
+   ```bash
+   cargo run --release --features "feature_name"
+   ```
+
+### Backtesting
+
+To run backtesting on historical data:
+
+1. Prepare your CSV data files with historical market data
+2. Update the file paths in the code (see `data_consumer_via_csv.rs`)
+3. Run the backtesting module:
+   ```bash
+   # Example command (modify as needed)
+   cargo run --bin backtest -- --timeframe 5min --strategy hammer --start-date 2023-01-01 --end-date 2023-12-31
+   ```
+
+### Monitoring
+
+Monitor the system's performance and active trades:
+
+1. Check MongoDB collections for trade data:
+   ```bash
+   # Using MongoDB shell
+   mongosh
+   use algo_trading
+   db.orders.find({})  # View all orders
+   db.trade_signals.find({})  # View all trade signals
+   ```
+
+2. Check Redis for cached data:
+   ```bash
+   # Using Redis CLI
+   redis-cli
+   KEYS *  # List all keys
+   GET order:latest  # Get latest order data
+   ```
+
+3. View logs:
+   ```bash
+   # If using a log file
+   tail -f algo_trading.log
+   ```
 
 ## Future Development
 

@@ -6,7 +6,7 @@ pub mod trade_watcher;
 pub mod user;
 use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
-use data_consumer::current_market_state::CurrentMarketState;
+use data_consumer::{current_market_state::CurrentMarketState, data_consumer_via_csv};
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
@@ -41,8 +41,8 @@ async fn main() {
     let client = Client::with_options(client_options).unwrap();
 
     let db = client.database(database_name);
-
-    // let stock_5_min_data = data_consumer_via_csv::read_5_min_data(FILE_5MIN_PATH).unwrap();
+    let file_5min_path = "./csv/ACC_with_indicators_.csv";
+    let stock_5_min_data = data_consumer_via_csv::read_5_min_data(file_5min_path).unwrap();
     let hammer_candle_collection_name = "hammer_candles";
     let hammer_candle_collection = db.collection::<HammerCandle>(hammer_candle_collection_name);
 
@@ -308,7 +308,7 @@ async fn main() {
                                         &raw_stock,
                                         thread_worker_config.time_frame.clone(),
                                         &current_market_state_collection,
-                                        redis_client.clone(),
+                                        redis_client,
                                         &raw_stock_ledger,
                                         database_instance.clone(),
                                     )
@@ -323,14 +323,14 @@ async fn main() {
                                     trade_signal_collection.clone(),
                                     order_manager.clone(),
                                     orders_collection.clone(),
-                                    redis_client.clone(),
+                                    redis_client,
                                     database_instance.clone(),
                                     shared_order_ledger.clone(),
                                 )
                                 .await;
                                 },
                                 TimeFrame::OneMinute =>{
-                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client.clone(), orders_collection.clone(), shared_order_ledger.clone()).await;
+                                    monitor_trade::check_for_exit_opportunity(&mut order_manager, raw_stock.clone(), redis_client, orders_collection.clone(), shared_order_ledger.clone()).await;
                                     // let temp = shared_order_ledger.lock().unwrap().clone();
                                     // println!("Shared Data => {:?}", shared_order_ledger.lock().unwrap());
                                 }

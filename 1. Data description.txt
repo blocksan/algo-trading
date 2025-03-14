@@ -1,0 +1,92 @@
+Indices Names:
+
+NIFTY 50,           NIFTY BANK,
+
+Stock Names: 
+
+ACC,                ADANIGREEN,         ADANIPORTS,     AMBUJACEM,      APOLLOHOSP, 
+ADANIENT,           ASIANPAINT,         AUROPHARMA,     AXISBANK,       BAJAJ-AUTO,
+BAJAJFINSV,         BAJAJHLDNG,         BAJFINANCE,     BANDHANBNK,     BANKBARODA,     
+BERGEPAINT,         BHARTIARTL,         BIOCON,         BOSCHLTD,       BPCL, 
+BRITANNIA           CADILAHC,           CHOLAFIN,       CIPLA,          COALINDIA,
+COLPAL,             DABUR,              DIVISLAB,       DLF,            DMART,
+DRREDDY,            EICHERMOT,          GAIL,           GLAND,          GODREJCP, 
+GRASIM,             HAVELLS,            HCLTECH,        HDFC,           HDFCAMC,
+HDFCBANK,           HDFCLIFE,           HEROMOTOCO,     HINDALCO,       HINDPETRO, 
+HINDUNILVR,         ICICIBANK,          ICICIGI,        ICICIPRULI,     IGL,
+INDIGO,             INDUSINDBK,         INDUSTOWER,     INFY,           IOC,
+ITC,                JINDALSTEL,         JSWSTEEL,       JUBLFOOD,       KOTAKBANK,
+LT,                 LTI,                LUPIN,          MARICO,         MARUTI, 
+MCDOWELL-N,         MUTHOOTFIN,         M_M,            NAUKRI,         NESTLEIND,
+NMDC,               NTPC,               ONGC,           PEL,            PGHH,
+PIDILITIND,         PIIND,              PNB,            POWERGRID,      RELIANCE,
+SAIL,               SBICARD,            SBILIFE,        SBIN,           SHREECEM,
+SIEMENS,            SUNPHARMA,          TATACONSUM,     TATAMOTORS,     TATASTEEL, 
+TCS,                TECHM,              TITAN,          TORNTPHARM,     ULTRACEMCO,
+UPL,                VEDL,               WIPRO,          YESBANK
+
+
+Detail about Columns and Technical indicators used - 
+
+1) Date - Date of observation
+2) Open - Open price of the index on a particular day
+3) High - High price of the index on a particular day
+4) Low - Low price of the index on a particular day
+5) Close - Close price of the index on a particular day
+6) sma5 - simple moving average for 5 close price
+7) sma10 - simple moving average for 10 close price
+8) sma15 - simple moving average for 15 close price
+9) sma20 - simple moving average for 20 close price
+10) ema5 - Exponential Moving Average for 5 close price
+11) ema10 -Exponential Moving Average for 10 close price
+12) ema15 - Exponential Moving Average for 15 close price
+13) ema20 - Exponential Moving Average for 20 close price
+14) upperband - Upperband of Bollinger band
+15) middleband - Middleband of Bollinger band
+16) lowerband - Lowerband of Bollinger band
+17) HT_TRENDLINE - Hilbert Transform - Instantaneous Trendline
+18) KAMA10 - Kaufman Adaptive Moving Average of 10 close price
+19) KAMA20 - Kaufman Adaptive Moving Average of 20 close price
+20) KAMA30 - Kaufman Adaptive Moving Average of 30 close price
+21) SAR - Parabolic SAR
+22) TRIMA5 - Triangular Moving Average of 5 close price
+23) TRIMA10 - Triangular Moving Average of 10 close price
+24) TRIMA20 - Triangular Moving Average of 20 close price
+25) ADX5 - Average Directional Movement Index of 5 close price
+26) ADX10 - Average Directional Movement Index of 10 close price
+27) ADX20 - Average Directional Movement Index of 20 close price
+28) APO - Absolute Price Oscillator
+29) CCI5 - Commodity Channel Index using last 5 time frame data
+30) CCI10 - Commodity Channel Index using last 10 time frame data
+31) CCI15 - Commodity Channel Index using last 15 time frame data
+32) macd510 - Moving Average Convergence/Divergence, fastperiod = 5 and slowperiod = 10
+33) macd520 - Moving Average Convergence/Divergence, fastperiod = 5 and slowperiod = 20
+34) macd1020 - Moving Average Convergence/Divergence, fastperiod = 10 and slowperiod = 20
+35) macd1520 - Moving Average Convergence/Divergence, fastperiod = 15 and slowperiod = 20
+36) macd1226 - Moving Average Convergence/Divergence, fastperiod = 12 and slowperiod = 26
+37) MOM10 - Momentum indicator of 10 close price
+38) MOM15 - Momentum indicator of 15 close price
+39) MOM20 - Momentum indicator of 20 close price
+40) ROC5 - Rate of change : ((price/prevPrice)-1)*100 using 5 close price
+41) ROC10 - Rate of change : ((price/prevPrice)-1)*100 using 10 close price
+42) ROC20 - Rate of change : ((price/prevPrice)-1)*100 using 20 close price
+43) PPO - Percentage Price Oscillator
+44) RSI14 - Relative Strength Index calculated using 14 close price
+45) RSI8 - Relative Strength Index calculated using 8 close price
+46) slowk - Stochastic indicator k value
+47) slowd - Stochastic indicator d value
+48) fastk - Stochastic Fast indicator k value
+49) fastd - Stochastic Fast indicator d value
+50) fastksr - Stochastic Relative Strength Index k value
+51) fastdsr - Stochastic Relative Strength Index d value
+52) ULTOSC - Ultimate Oscillator
+53) WILLR - Williams' %R
+54) ATR - Average True Range
+55) Trange - True Range
+56) TYPPRICE - Typical Price
+57) HT_DCPERIOD - Hilbert Transform - Dominant Cycle Period
+58) BETA - Beta
+
+
+For more information of the technical indicators, follow this link: 
+https://mrjbq7.github.io/ta-lib/

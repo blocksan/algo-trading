@@ -22,22 +22,28 @@ pub fn read_5_min_data(file_path: &str) -> Result<Vec<RawStock>, Box<dyn std::er
         let file_name_parts = file_path.split("_");
         for result in file.records() {
             let record = result.expect("Not able to read");
-            let date: String = record[1].parse().unwrap();
+            let date: String = record[0].parse().unwrap();
             // Print the values of each column in the record
             for (index, column) in record.iter().enumerate() {
-                if index == 0 || index == 1 {
+                if index == 0 {
                     continue;
                 }
                 stock_array.push(column.parse::<f32>().unwrap());
             }
+            //open,high,low,close,volume
+            let open = stock_array[0];
+            let high = stock_array[1];
+            let low = stock_array[2];
+            let close = stock_array[3];
+            let volume = stock_array[4] as i32;
             let stock = RawStock::new(
                 file_name_parts.clone().collect::<Vec<&str>>()[0].to_string(),
                 date,
-                stock_array[0],
-                stock_array[1],
-                stock_array[2],
-                stock_array[3],
-                stock_array[4] as i32,
+                close,
+                high,
+                low,
+                open,
+                volume,
                 TimeFrame::FiveMinutes
             );
             stock_5_min_keeper.push(stock);
