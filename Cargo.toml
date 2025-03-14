@@ -25,6 +25,10 @@ path = "src/api_server.rs"
 name = "data_dump"
 path = "src/data_dump_script.rs"
 
+[[bin]]
+name = "extract_api_docs"
+path = "src/tools/extract_api_docs.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -50,3 +54,6 @@ dotenv = "0.15.0"
 actix-web = "4.3.1"
 swagger-ui = "0.1.0"
 actix-files = "0.6.2"
+syn = { version = "1.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
