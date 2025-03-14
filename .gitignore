@@ -2,3 +2,10 @@
 /.DS_Store
 /rust_runner.sh
 /.env
+/csvscript/node_modules
+/csvscript/build
+/csvscript/dist
+/csvscript/node_modules
+/csvscript/package-lock.json
+# /csvscript/package.json
+# /csvscript/tsconfig.json
