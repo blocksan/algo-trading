@@ -11,19 +11,15 @@ fn extract_api_docs_from_file(file_path: &Path) -> Vec<String> {
     
     for item in file.items {
         if let Item::Fn(func) = item {
-            if has_api_doc_attribute(&func.attrs) {
+            // Extract from any function with doc comments containing @path
+            let doc = extract_doc_from_function(&func);
+            if doc.contains("@path") {
                 docs.push(extract_doc_from_function(&func));
             }
         }
     }
     
     docs
-}
-
-fn has_api_doc_attribute(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        attr.path.segments.iter().any(|segment| segment.ident == "api_doc")
-    })
 }
 
 fn extract_doc_from_function(func: &ItemFn) -> String {

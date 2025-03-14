@@ -4,6 +4,7 @@ pub mod data_consumer;
 pub mod order_manager;
 pub mod trade_watcher;
 pub mod user;
+#[macro_use]
 pub mod api;
 pub mod config;
 
