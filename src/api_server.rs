@@ -12,6 +12,9 @@ use api::routes::routes_config;
 use api::utils::app_state::AppState;
 use lazy_static::lazy_static;
 use config::mongodb_connection;
+use actix_files as fs;
+use std::path::PathBuf;
+
 lazy_static! {
     static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
         let temp = env::var("HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE").unwrap_or_else(|_| String::from("0.0"));
@@ -45,7 +48,7 @@ lazy_static! {
     
 }
 
-use actix_web::{ App, HttpServer, web};
+use actix_web::{ App, HttpServer, web, HttpResponse };
 
 use crate::data_consumer::current_market_state::CurrentMarketState;
 
@@ -80,6 +83,13 @@ async fn main() -> std::io::Result<()> {
         .app_data(web::Data::new(AppState{
             current_market_state_collection: current_market_state_collection.clone(),
         }))
+        .service(fs::Files::new("/swagger-ui", "./swagger-ui").index_file("index.html"))
+        .service(web::resource("/swagger.yaml").route(web::get().to(|| async {
+            let swagger_spec = include_str!("../algo-trading-api.yaml");
+            HttpResponse::Ok()
+                .content_type("application/yaml")
+                .body(swagger_spec)
+        })))
         .configure(|cfg| {
             routes_config(cfg);
         })

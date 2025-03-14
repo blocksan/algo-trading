@@ -1,0 +1,588 @@
+openapi: 3.0.0
+info:
+  title: Algo Trading API
+  description: API for algorithmic trading backtesting and analysis
+  version: 1.0.0
+servers:
+  - url: http://localhost:8090/api
+    description: Local development server
+paths:
+  /healthcheck:
+    get:
+      summary: Check API health
+      description: Returns a simple message to confirm the API is running
+      responses:
+        '200':
+          description: Successful response
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Happy Trading!"
+  
+  /create_user:
+    post:
+      summary: Create a new user
+      description: Creates a new user in the system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+              properties:
+                name:
+                  type: string
+                  example: "John Doe"
+                email:
+                  type: string
+                  format: email
+                  example: "john@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "securepassword123"
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "New user created"
+  
+  /fetch_user/{email}:
+    get:
+      summary: Fetch user by email
+      description: Retrieves a user by their email address
+      parameters:
+        - name: email
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "john@example.com"
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  
+  /add_new_pnl_configuration:
+    post:
+      summary: Add new PnL configuration
+      description: Creates a new profit and loss configuration for backtesting
+      responses:
+        '200':
+          description: PnL configuration added
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "add_new_pnl_configuration"
+  
+  /fetch_current_pnl_configuration/{user_id}:
+    get:
+      summary: Fetch current PnL configuration
+      description: Retrieves the current PnL configuration for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "64d8febebe3ea57f392c36df"
+      responses:
+        '200':
+          description: PnL configuration found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PnLConfiguration'
+  
+  /fetch_current_pnl_state:
+    post:
+      summary: Fetch current PnL state
+      description: Retrieves the current profit and loss state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrentPnLStateBodyParams'
+      responses:
+        '200':
+          description: Current PnL state found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurrentPnLState'
+  
+  /fetch_current_market_state:
+    post:
+      summary: Fetch current market state
+      description: Retrieves the current market state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrentMarketStateBodyParams'
+      responses:
+        '200':
+          description: Current market state found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurrentMarketState'
+  
+  /fetch_orders:
+    post:
+      summary: Fetch orders
+      description: Retrieves orders based on provided parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderBodyParams'
+      responses:
+        '200':
+          description: Orders found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+  
+  /fetch_trade_signals:
+    post:
+      summary: Fetch trade signals
+      description: Retrieves trade signals based on provided parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeSignalBodyParams'
+      responses:
+        '200':
+          description: Trade signals found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TradeSignal'
+  
+  /candles/fetch_hammer_candles:
+    post:
+      summary: Fetch hammer candles
+      description: Retrieves hammer candle patterns based on provided parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HammerCandleBodyParams'
+      responses:
+        '200':
+          description: Hammer candles found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HammerCandle'
+  
+  /algo/create_static_pnl_config/backtest_strategy:
+    post:
+      summary: Create static PnL config for backtesting
+      description: Creates a static profit and loss configuration for backtesting
+      responses:
+        '200':
+          description: Static PnL configuration created
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "PnL configuration created successfully"
+  
+  /algo/backtest_strategy/{pnl_configuration_id}:
+    post:
+      summary: Run backtest strategy
+      description: Runs a backtest strategy with the specified PnL configuration
+      parameters:
+        - name: pnl_configuration_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "6500bda2b5fbcf0f36cf3f7e"
+      responses:
+        '200':
+          description: Backtest completed
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Backtest completed with Total Time Taken: 2.5s"
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "64d8febebe3ea57f392c36df"
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          example: "john@example.com"
+        password:
+          type: string
+          example: "hashedpassword123"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-08-13 14:30:45"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-08-13 14:30:45"
+        active:
+          type: boolean
+          example: true
+    
+    PnLConfiguration:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7e"
+        user_id:
+          type: string
+          example: "64d8febebe3ea57f392c36df"
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbols:
+          type: array
+          items:
+            type: string
+          example: ["ADANIGREEN", "ACC", "NIFTY"]
+        time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-08-13 14:30:45"
+    
+    CurrentPnLStateBodyParams:
+      type: object
+      properties:
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        pnl_congiguration_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7e"
+        user_id:
+          type: string
+          example: "64d8febebe3ea57f392c36df"
+        current_pnl_state_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7f"
+    
+    CurrentPnLState:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7f"
+        user_id:
+          type: string
+          example: "64d8febebe3ea57f392c36df"
+        pnl_configuration_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7e"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-08-13 14:30:45"
+    
+    CurrentMarketStateBodyParams:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+    
+    CurrentMarketState:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f80"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+        support:
+          type: array
+          items:
+            type: number
+          example: [1250.5, 1245.2, 1240.0]
+        resistance:
+          type: array
+          items:
+            type: number
+          example: [1260.0, 1265.5, 1270.0]
+        last_consecutive_red_candle_count:
+          type: integer
+          example: 3
+    
+    OrderBodyParams:
+      type: object
+      properties:
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        current_pnl_state_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7f"
+    
+    Order:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f81"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        entry_price:
+          type: number
+          example: 1255.5
+        stop_loss:
+          type: number
+          example: 1245.0
+        target:
+          type: number
+          example: 1275.0
+        trade_type:
+          type: string
+          enum: ["Long", "Short"]
+          example: "Long"
+        algo_type:
+          type: string
+          enum: ["HammerPatternAlgo", "ShootingStarPatternAlgo"]
+          example: "HammerPatternAlgo"
+        status:
+          type: string
+          enum: ["Pending", "Executed", "Completed", "Cancelled"]
+          example: "Executed"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-06-30 10:15:30"
+    
+    TradeSignalBodyParams:
+      type: object
+      properties:
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        current_pnl_state_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7f"
+    
+    TradeSignal:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f82"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        date:
+          type: string
+          format: date-time
+          example: "2023-06-30 10:15:00"
+        entry_price:
+          type: number
+          example: 1255.5
+        stop_loss:
+          type: number
+          example: 1245.0
+        target:
+          type: number
+          example: 1275.0
+        trade_type:
+          type: string
+          enum: ["Long", "Short"]
+          example: "Long"
+        algo_type:
+          type: string
+          enum: ["HammerPatternAlgo", "ShootingStarPatternAlgo"]
+          example: "HammerPatternAlgo"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-06-30 10:15:30"
+    
+    HammerCandleBodyParams:
+      type: object
+      properties:
+        start_trade_date:
+          type: string
+          format: date
+          example: "2023-01-01"
+        end_trade_date:
+          type: string
+          format: date
+          example: "2023-06-30"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        market_time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+        is_green_candle:
+          type: boolean
+          example: true
+        volume:
+          type: integer
+          example: 10000
+        volume_operator:
+          type: string
+          enum: ["$gte", "$lte"]
+          example: "$gte"
+    
+    HammerCandle:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f83"
+        symbol:
+          type: string
+          example: "ADANIGREEN"
+        date:
+          type: string
+          format: date-time
+          example: "2023-06-30 10:15:00"
+        open:
+          type: number
+          example: 1250.0
+        high:
+          type: number
+          example: 1260.0
+        low:
+          type: number
+          example: 1240.0
+        close:
+          type: number
+          example: 1255.5
+        volume:
+          type: integer
+          example: 15000
+        market_time_frame:
+          type: string
+          enum: ["1min", "5min", "15min", "30min", "1hour", "1day"]
+          example: "5min"
+        is_green_candle:
+          type: boolean
+          example: true
+        is_hammer:
+          type: boolean
+          example: true
+        body_size_ratio:
+          type: number
+          example: 0.15
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-06-30 10:15:30"
+        curren_pnl_state_id:
+          type: string
+          example: "6500bda2b5fbcf0f36cf3f7f"
