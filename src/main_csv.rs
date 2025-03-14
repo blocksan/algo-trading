@@ -4,6 +4,7 @@ pub mod data_consumer;
 pub mod order_manager;
 pub mod trade_watcher;
 pub mod user;
+pub mod config;
 
 use algo_hub::hammer_pattern::{self, HammerCandle};
 use common::redis_client::RedisClient;
@@ -13,6 +14,39 @@ use order_manager::{
     trade_signal_keeper::{self, TradeSignal},
 };
 use std::sync::{Arc, Mutex};
+use std::env;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {
+        let temp = env::var("HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE")
+            .unwrap_or_else(|_| String::from("0.0025"));
+        temp.parse::<f32>().unwrap()
+    };
+    pub static ref HAMMER_RED_CANDLES_COUNT_THRESHOLD: i32 = {
+        let temp =
+            env::var("HAMMER_RED_CANDLES_COUNT_THRESHOLD").unwrap_or_else(|_| String::from("3"));
+        temp.parse::<i32>().unwrap()
+    };
+    pub static ref HAMMER_MAX_DROP_THRESHOLD_VALUE: f32 = {
+        let temp =
+            env::var("HAMMER_MAX_DROP_THRESHOLD_VALUE").unwrap_or_else(|_| String::from("20.0"));
+        temp.parse::<f32>().unwrap()
+    };
+    pub static ref HAMMER_MAX_DROP_CANDLE_COUNT: usize = {
+        let temp = env::var("HAMMER_MAX_DROP_CANDLE_COUNT").unwrap_or_else(|_| String::from("2"));
+        temp.parse::<usize>().unwrap()
+    };
+    pub static ref HAMMER_SL_MARGIN_POINTS: f32 = {
+        let temp = env::var("HAMMER_SL_MARGIN_POINTS").unwrap_or_else(|_| String::from("1.0"));
+        temp.parse::<f32>().unwrap()
+    };
+    pub static ref HAMMER_TARGET_MARGIN_MULTIPLIER: f32 = {
+        let temp =
+            env::var("HAMMER_TARGET_MARGIN_MULTIPLIER").unwrap_or_else(|_| String::from("1.5"));
+        temp.parse::<f32>().unwrap()
+    };
+}
 
 use mongodb::{options::ClientOptions, Client};
 
@@ -54,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut hammer_ledger = hammer_pattern::HammerPatternUtil::new();
     let mut trade_keeper = trade_signal_keeper::TradeSignalsKeeper::new();
     let mut order_manager = order_dispatcher::OrderManager::new();
-    let shared_order_ledger: Arc<Mutex<Vec<Order>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut shared_order_ledger: Vec<Order> = Vec::new();
     let redis_client = RedisClient::get_instance();
     
     // Process each stock data point
@@ -67,23 +101,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Process the stock data through the hammer pattern algorithm
         if let Some(trade_signal) = hammer_ledger.calculate_and_add_ledger(
-            stock, 
-            hammer_candle_collection.clone()
+            stock,
+            Some("dummy_pnl_configuration_id".to_string())
         ).await {
             // println!("Found hammer pattern at {}: {:?}", stock.date, trade_signal);
             
             // Add the trade signal to the keeper
             trade_keeper.add_trade_signal(
-                &trade_signal, 
-                trade_signal_collection.clone()
+                &trade_signal
             ).await;
             
             // Create an order based on the trade signal
             order_manager.check_and_dispatch_order(
                 trade_signal,
                 &redis_client,
-                orders_collection.clone(),
-                shared_order_ledger.clone()
+                &mut shared_order_ledger
             ).await;
             
             // println!("Order dispatched for symbol: {}", stock.symbol);
@@ -94,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nProcessing complete!");
     println!("Hammer patterns found: {}", hammer_ledger.fetch_hammer_pattern_ledger().len());
     println!("Trade signals generated: {}", trade_keeper.get_trade_signals().len());
-    println!("Orders created: {}", shared_order_ledger.lock().unwrap().len());
+    println!("Orders created: {}", shared_order_ledger.len());
     
     Ok(())
-} 
+}
