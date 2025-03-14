@@ -1,1 +1,1 @@
-pub mod stock_5_min;
+pub mod stock;

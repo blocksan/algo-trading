@@ -1,8 +1,9 @@
 use mongodb::{Database, Collection};
 use serde::{Deserialize, Serialize};
-use std::{fmt, sync::{Arc, Mutex}};
+use tokio::sync::Mutex;
+use std::{fmt, sync::Arc};
 
-use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self}};
+use crate::{algo_hub::hammer_pattern::{HammerCandle, HammerPatternUtil}, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher::Order, trade_signal_keeper::{TradeSignal, TradeSignalsKeeper}, self, pnl_state::{CurrentPnLState, PnLConfiguration}}, user::user::User};
 
 
 #[allow(dead_code)]
@@ -57,6 +58,7 @@ pub enum TimeFrame{
     ThreeMinutes,
     FiveMinutes,
     FifteenMinutes,
+    SixtyMinutes,
     OneDay,
     OneWeek,
     OneMonth,
@@ -94,15 +96,11 @@ pub struct TradeableAlgoConfig<GenericCollectionStruct, GenericCollectionLedger>
 
 #[derive(Debug, Clone)]
 pub struct RootSystemConfig {
-    pub database_instance : Database,
-    pub hammer_candle_collection: Collection<HammerCandle>,
     pub hammer_ledger: HammerPatternUtil,
-    pub current_market_state_collection: Collection<CurrentMarketState>,
-    pub orders_collection: Collection<Order>,
-    pub trade_signal_collection: Collection<TradeSignal>,
     pub server_url: String,
     pub tradeable_algo_types: Vec<AlgoTypes>,
     pub trade_keeper: TradeSignalsKeeper, 
     pub order_manager: order_manager::order_dispatcher::OrderManager,
-    pub shared_order_ledger: Arc<Mutex<Vec<Order>>>
+    pub shared_order_ledger: Arc<Mutex<Vec<Order>>>,
+    pub pnl_configuration_id: String, //INFO: specific to backtest only
 }

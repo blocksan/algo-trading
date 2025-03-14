@@ -9,6 +9,24 @@ edition = "2021"
 name = "main_csv"
 path = "src/main_csv.rs"
 
+[[bin]]
+name = "socket_data_1min"
+path = "src/socket_data_1min.rs"
+
+# [[bin]]
+# name = "backtest_main"
+# path = "src/backtest_main.rs"
+
+[[bin]]
+name = "api_server"
+path = "src/api_server.rs"
+
+[[bin]]
+name = "data_dump"
+path = "src/data_dump_script.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
 csv = "1.1.6"
 linked-hash-map = "0.5"
@@ -25,3 +43,8 @@ lazy_static = "1.4"
 tokio-tungstenite = "0.16.0"
 tungstenite = "0.15.0"
 url = "2.2.2"
+serde_derive = "1.0"
+uuid = "1.4.1"
+colored = "2.0"
+dotenv = "0.15.0"
+actix-web = "4.3.1"

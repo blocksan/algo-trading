@@ -1,5 +1,5 @@
 // redis_client.rs
-use std::{sync::{Mutex, Once}, fmt::{Debug, self}};
+use std::sync::{Mutex, Once};
 
 use redis::{Client, Commands, Connection, RedisResult};
 
