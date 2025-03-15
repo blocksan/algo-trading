@@ -1,12 +1,8 @@
 
 use crate::{
-    algo_hub::{algo_dispatcher, hammer_pattern},
-    common::{
-        date_parser,
-        enums::{AlgoTypes, RootSystemConfig, ThreadJobType, ThreadWorkerConfig},
-        raw_stock::{RawStock, RawStockLedger}, redis_client::RedisClient,
-    },
-    trade_watcher::monitor_trade, order_manager::{trade_signal_keeper, order_dispatcher, pnl_state::{ PnLConfiguration, STATIC_USER_ID, CurrentPnLState, CurrentPnLStateBodyParams}}, data_consumer::current_market_state::CurrentMarketState,
+    algo_hub::{algo_dispatcher, hammer_pattern}, common::{
+        constant::{REQUESTED_START_DATE, REQUESTED_END_DATE, REQUESTED_SYMBOL, REQUESTED_USER_ID, MAX_TRADE_COUNT, MAX_SL_HIT_COUNT, TARGETED_PNL, TARGETED_PNL_PERCENTAGE, MAX_TARGET_HIT_COUNT, MAX_SL_CAPACITY, MAX_TRADE_CAPITAL, IS_BACKTEST_CONFIG}, date_parser, enums::{AlgoTypes, RootSystemConfig, ThreadJobType, ThreadWorkerConfig}, raw_stock::{RawStock, RawStockLedger}, redis_client::RedisClient
+    }, data_consumer::current_market_state::CurrentMarketState, order_manager::{order_dispatcher, pnl_state::{ CurrentPnLState, CurrentPnLStateBodyParams, PnLConfiguration}, trade_signal_keeper}, trade_watcher::monitor_trade
 };
 use crate::{common::enums::TimeFrame, order_manager::order_dispatcher::Order};
 
@@ -205,7 +201,7 @@ pub async fn backtest_strategy(pnl_configuration_id: String) -> Option<String> {
                                     CurrentMarketState::calculate_market_state(
                                         &raw_stock,
                                         raw_stock.market_time_frame.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &raw_stock_ledger,
                                     )
                                     .await;
@@ -215,7 +211,7 @@ pub async fn backtest_strategy(pnl_configuration_id: String) -> Option<String> {
                                         hammer_ledger.clone(),
                                         trade_keeper.clone(),
                                         order_manager.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         current_pnl_state.id.to_string(),
                                         &mut locked_shared_order_ledger,
                                     )
@@ -223,14 +219,14 @@ pub async fn backtest_strategy(pnl_configuration_id: String) -> Option<String> {
                                     monitor_trade::check_for_exit_opportunity(
                                         &mut order_manager,
                                         raw_stock.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
                                     monitor_trade::check_for_execute_opportunity(
                                         &mut order_manager,
                                         raw_stock.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
@@ -257,8 +253,33 @@ pub async fn backtest_strategy(pnl_configuration_id: String) -> Option<String> {
 
 
 pub async fn create_static_pnl_config() -> Option<Vec<PnLConfiguration>>{
-    PnLConfiguration::new_static_backtest_config().await;
-    let pnl_configuration = PnLConfiguration::fetch_current_pnl_configuration(None, Some(STATIC_USER_ID.to_string()), None, None).await;
+    let requested_start_date = REQUESTED_START_DATE;
+    let requested_end_date = REQUESTED_END_DATE;
+    let requested_symbol = REQUESTED_SYMBOL;
+    let requested_user_id = REQUESTED_USER_ID;
+    let max_trade_count = MAX_TRADE_COUNT;
+    let max_sl_hit_count = MAX_SL_HIT_COUNT;
+    let targeted_pnl = TARGETED_PNL;
+    let targeted_pnl_percentage = TARGETED_PNL_PERCENTAGE;
+    let max_target_hit_count = MAX_TARGET_HIT_COUNT;
+    let max_sl_capacity = MAX_SL_CAPACITY;
+    let max_trade_capital = MAX_TRADE_CAPITAL;
+    let is_backtest_config = IS_BACKTEST_CONFIG;
+    PnLConfiguration::new_static_backtest_config(
+        requested_start_date,
+        requested_end_date,
+        requested_symbol,
+        requested_user_id,
+        max_trade_count,
+        max_sl_hit_count,
+        targeted_pnl,   
+        targeted_pnl_percentage,
+        max_target_hit_count,
+        max_sl_capacity,
+        max_trade_capital,
+        is_backtest_config,
+    ).await;
+    let pnl_configuration = PnLConfiguration::fetch_current_pnl_configuration(None, Some(REQUESTED_USER_ID.to_string()), None, None).await;
     pnl_configuration
 }
 

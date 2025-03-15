@@ -5,4 +5,5 @@ pub mod number_parser;
 pub mod redis_client;
 pub mod enums;
 pub mod utils;
+pub mod constant;
 // pub mod database;

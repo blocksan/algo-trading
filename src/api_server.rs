@@ -14,7 +14,6 @@ use api::utils::app_state::AppState;
 use lazy_static::lazy_static;
 use config::mongodb_connection;
 use actix_files as fs;
-use std::path::PathBuf;
 
 lazy_static! {
     static ref HAMMER_LOWER_WICK_HORIZONTAL_SUPPORT_TOLERANCE: f32 = {

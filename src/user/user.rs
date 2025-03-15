@@ -6,7 +6,8 @@ use crate::{config::mongodb_connection, common::date_parser};
 #[allow(dead_code)]
 #[derive(Debug,Clone, Serialize, Deserialize)]
 pub struct User {
-    #[serde(rename = "_id")]
+    #[serde(rename = "id", serialize_with = "serialize_object_id")]
+    #[serde(rename(deserialize = "_id"))]
     pub id: ObjectId,
     pub name: String,
     pub email: String,
@@ -16,6 +17,12 @@ pub struct User {
     pub active: bool,
 }
 
+fn serialize_object_id<S>(oid: &ObjectId, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    s.serialize_str(&oid.to_hex())
+}
 impl User {
     pub fn new(
         id: ObjectId,
@@ -70,7 +77,7 @@ impl User {
         
     }
     pub async fn get_user_by_email(email: &str, user_collection: Collection<User>) -> Option<User> {
-        let filter = doc! { "email": email.clone() };
+        let filter = doc! { "email": email };
         match user_collection.find_one(filter, None).await {
             Ok(user) => {
                 match user {

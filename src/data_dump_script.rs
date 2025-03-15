@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
 
     for stock_symbol in stock_symbols {
         println!("Processing stock symbol: {}", stock_symbol);
-        let collection_name = stock_symbol.clone();
+        let collection_name = stock_symbol;
         let collection = db.collection::<Document>(collection_name.trim().to_lowercase().as_str());
 
         // Read the CSV file
@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
                 }
                 // Create a BSON document from the CSV record
                 let doc = doc! {
-                    "symbol": stock_symbol.clone(),
+                    "symbol": stock_symbol,
                     "date": date_time.unwrap(),
                     "close": record.close,
                     "high": record.high,

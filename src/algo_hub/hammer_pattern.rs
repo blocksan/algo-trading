@@ -199,6 +199,9 @@ impl HammerPatternUtil {
         let (is_hammer_candle, calculated_body_size, is_green_candle) =
         HammerPatternUtil::calculate_candle_metadata(stock).await;
 
+        println!("is_hammer_candle => {:?}", is_hammer_candle);
+        println!("is_green_candle => {:?}", is_green_candle);
+        println!("calculated_body_size => {:?}", calculated_body_size);
 
         if is_hammer_candle {
             let hammer_candle = HammerCandle::new(
@@ -369,8 +372,11 @@ impl HammerPatternUtil {
             }
                 
          }
-        
-        standalone_hammer && (hammer_around_support || hammer_after_drop || hammer_after_red_candles)
+        println!("hammer_around_support => {:?}", hammer_around_support);
+        println!("hammer_after_drop => {:?}", hammer_after_drop);
+        println!("hammer_after_red_candles => {:?}", hammer_after_red_candles);
+        // standalone_hammer && (hammer_around_support || hammer_after_drop || hammer_after_red_candles)
+        standalone_hammer
 
     }
 

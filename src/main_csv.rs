@@ -13,7 +13,6 @@ use order_manager::{
     order_dispatcher,
     trade_signal_keeper::{self, TradeSignal},
 };
-use std::sync::{Arc, Mutex};
 use std::env;
 use lazy_static::lazy_static;
 
@@ -76,13 +75,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     
     // Read stock data from CSV
-    let stock_5min_data = data_consumer_via_csv::read_5_min_data(file_5min_path)?;
+    let requested_start_date = "2022-01-01 09:30:00+05:30";
+    let requested_end_date = "2022-01-31 15:30:00+05:30";
+    let requested_stock_symbol = "ACC";
+    let requested_time_frame = TimeFrame::FiveMinutes;
+    let requested_algo_types = vec![AlgoTypes::HammerPatternAlgo];
+
+    pub const CURRENT_STOCK_DATE: &str = "2022-10-14 09:30:00+05:30";
+    pub const END_STOCK_DATE: &str = "2022-10-27 15:30:00+05:30";
+    pub const STATIC_SYMBOL:&str = "ADANIGREEN";
+    pub const STATIC_USER_ID:&str = "64d8febebe3ea57f392c36df";
+
+    let stock_5min_data = data_consumer_via_csv::read_5_min_data(file_5min_path, requested_start_date, requested_end_date, requested_stock_symbol)?;
     println!("Successfully loaded {} data points", stock_5min_data.len());
     
     // Initialize collections and utilities
-    let hammer_candle_collection = db.collection::<HammerCandle>("hammer_candles");
-    let trade_signal_collection = db.collection::<TradeSignal>("trade_signals");
-    let orders_collection = db.collection::<Order>("orders");
+    // let hammer_candle_collection = db.collection::<HammerCandle>("hammer_candles");
+    // let trade_signal_collection = db.collection::<TradeSignal>("trade_signals");
+    // let orders_collection = db.collection::<Order>("orders");
     
     // Initialize trading components
     let mut hammer_ledger = hammer_pattern::HammerPatternUtil::new();
@@ -99,10 +109,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // println!("Processing record {}/{}", index, stock_5min_data.len());
         }
         
+        println!("stock.date: {:?}", stock);
         // Process the stock data through the hammer pattern algorithm
         if let Some(trade_signal) = hammer_ledger.calculate_and_add_ledger(
             stock,
-            Some("dummy_pnl_configuration_id".to_string())
+            None
         ).await {
             // println!("Found hammer pattern at {}: {:?}", stock.date, trade_signal);
             

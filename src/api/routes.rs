@@ -1,4 +1,5 @@
-use actix_web::{web, get, Responder, HttpResponse};
+use actix_web::{web, get, Responder};
+use crate::api::utils::api_response::ApiResponse;
 
 use super::handlers::{
     pnl_state_api::{add_new_pnl_configuration, fetch_current_pnl_state, fetch_current_pnl_configuration, create_static_pnl_config}, 
@@ -9,7 +10,11 @@ use super::handlers::{
 
 #[get("/healthcheck")]
 async fn healthcheck() -> impl Responder {
-    HttpResponse::Ok().body("Happy Trading!")
+    ApiResponse::success("Happy Trading!",  
+        serde_json::json!({
+            "service": "algo-trading"
+        })
+    )
 }
 
 pub fn routes_config(cfg: &mut web::ServiceConfig) {

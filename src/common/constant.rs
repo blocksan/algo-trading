@@ -1,0 +1,12 @@
+pub const REQUESTED_START_DATE: &str = "2022-01-01 09:30:00+05:30";
+pub const REQUESTED_END_DATE: &str = "2022-01-31 15:30:00+05:30";
+pub const REQUESTED_SYMBOL: &str = "ACC";
+pub const REQUESTED_USER_ID: &str = "67d53f75c385b5b46783804a";
+pub const MAX_TRADE_COUNT: i32 = 10;
+pub const MAX_SL_HIT_COUNT: i32 = 10;
+pub const TARGETED_PNL: f32 = 10.0;
+pub const TARGETED_PNL_PERCENTAGE: f32 = 10.0;
+pub const MAX_TARGET_HIT_COUNT: i32 = 10;
+pub const MAX_SL_CAPACITY: f32 = 10.0;
+pub const MAX_TRADE_CAPITAL: f32 = 10.0;
+pub const IS_BACKTEST_CONFIG: bool = true;

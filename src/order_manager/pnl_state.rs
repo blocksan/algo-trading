@@ -18,11 +18,6 @@ use crate::{common::{
 
 use super::order_dispatcher::Order;
 
-pub const CURRENT_STOCK_DATE: &str = "2022-10-14 09:30:00+05:30";
-pub const END_STOCK_DATE: &str = "2022-10-27 15:30:00+05:30";
-pub const STATIC_SYMBOL:&str = "ADANIGREEN";
-pub const STATIC_USER_ID:&str = "64d8febebe3ea57f392c36df";
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct CurrentPnLStateBodyParams{
     pub start_trade_date: Option<String>,
@@ -174,7 +169,7 @@ impl CurrentPnLState {
         println!("new_static_current_pnl_state => symbol: {}, pnl_configuration_id: {}, start_trading_date: {}, end_trading_date: {}", symbol, pnl_configuration_id, start_trading_date, end_trading_date);
 
         let (current_pnl_cache_key, _current_pnl_cache_algo_types_key ) =
-            Self::get_current_pnl_cache_key(start_trading_date.clone(), symbol, pnl_configuration_id);
+            Self::get_current_pnl_cache_key(start_trading_date, symbol, pnl_configuration_id);
 
         let current_pnl_state_option =
             Self::fetch_current_pnl_state_via_cache_key(current_pnl_cache_key.as_str(), true).await;
@@ -194,8 +189,8 @@ impl CurrentPnLState {
 
                     let current_pnl_state_id = ObjectId::new();
 
-                    let start_trade_date = start_trading_date.clone(); //TODO: update the trading date with the current date SOD
-                    let end_trade_date = end_trading_date.clone(); //TODO: update the trading date with the current date EOD
+                    let start_trade_date = start_trading_date; //TODO: update the trading date with the current date SOD
+                    let end_trade_date = end_trading_date; //TODO: update the trading date with the current date EOD
                     let current_pnl = 0.0;
                     let current_pnl_percentage = 0.0;
                     let targeted_pnl = pnl_configuration.targeted_pnl;
@@ -299,8 +294,8 @@ impl CurrentPnLState {
 
                     let current_pnl_state_id = ObjectId::new();
                     println!("current_pnl_state_id => {:?}", current_pnl_state_id.clone());
-                    let start_trade_date = start_trading_date.clone(); //TODO: update the trading date with the current date SOD
-                    let end_trade_date = end_trading_date.clone(); //TODO: update the trading date with the current date EOD
+                    let start_trade_date = start_trading_date; //TODO: update the trading date with the current date SOD
+                    let end_trade_date = end_trading_date; //TODO: update the trading date with the current date EOD
                     let current_pnl = 0.0;
                     let current_pnl_percentage = 0.0;
                     let targeted_pnl = pnl_configuration.targeted_pnl;
@@ -394,7 +389,7 @@ impl CurrentPnLState {
             current_pnl
         } else {
                 let current_pnl_state_collection = Self::get_current_pnl_state_collection().await;
-                let filter = doc! {"current_pnl_state_cache_key": current_pnl_cache_key.clone() };
+                let filter = doc! {"current_pnl_state_cache_key": current_pnl_cache_key };
                 let options = FindOneOptions::builder().build();
                 match current_pnl_state_collection.find_one(filter, options).await {
                     Ok(Some(data)) => {
@@ -592,7 +587,7 @@ impl CurrentPnLState {
             }
         }
 
-        let filter = doc! {"current_pnl_state_cache_key": current_pnl_cache_key.clone() };
+        let filter = doc! {"current_pnl_state_cache_key": current_pnl_cache_key};
         let options: UpdateOptions = UpdateOptions::builder().upsert(true).build();
         let current_pnl_state_doc = doc! {"$set":current_pnl_state.to_document()};
         let current_pnl_state_collection = Self::get_current_pnl_state_collection().await;
@@ -601,7 +596,7 @@ impl CurrentPnLState {
             .await
         {
             Ok(_) => {
-                println!("Successfully inserted/updated new current PnL state for the user with cache key: {}", current_pnl_cache_key.clone());
+                println!("Successfully inserted/updated new current PnL state for the user with cache key: {}", current_pnl_cache_key);
             }
             Err(e) => {
                 println!("Error while inserting new current PnL state: {}", e);
@@ -718,8 +713,15 @@ pub struct PnLConfiguration {
 
     pub is_backtest_config: bool,
 
-    #[serde(rename = "_id")]
+    #[serde(rename = "id", serialize_with = "serialize_object_id")]
+    #[serde(rename(deserialize = "_id"))]
     pub id: ObjectId,
+}
+fn serialize_object_id<S>(oid: &ObjectId, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    s.serialize_str(&oid.to_hex())
 }
 
 impl PnLConfiguration {
@@ -766,34 +768,46 @@ impl PnLConfiguration {
     }
 
     //TODO: set the config from UI and save it in DB for the logged in user
-    pub async fn new_static_backtest_config() {
+    pub async fn new_static_backtest_config(
+        requested_start_date: &str, 
+        requested_end_date: &str, 
+        requested_symbol: &str, 
+        requested_user_id: &str,
+        max_trade_count: i32,
+        max_sl_hit_count: i32,
+        targeted_pnl: f32,
+        targeted_pnl_percentage: f32,
+        max_target_hit_count: i32,
+        max_sl_capacity: f32,
+        max_trade_capital: f32,
+        is_backtest_config: bool,
+    ) -> (Option<PnLConfiguration>, String) {
         let pnl_configuration_collection = Self::get_pnl_configuration_collection().await;
         let created_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         let updated_at = date_parser::new_current_date_time_in_desired_stock_datetime_format();
         //TODO: remove static date once live market data is available
-        let start_trade_date =  parse_date_in_stock_format(CURRENT_STOCK_DATE) 
+        let start_trade_date =  parse_date_in_stock_format(requested_start_date) 
             .unwrap()
             .to_string();
 
         //DateTime::parse_from_str(CURRENT_STOCK_DATE, "%Y-%m-%d %H:%M:%S%Z")
 
         //TODO: remove static date once live market data is available
-        let end_trade_date = parse_date_in_stock_format(END_STOCK_DATE)
+        let end_trade_date = parse_date_in_stock_format(requested_end_date)
             .unwrap()
             .to_string();
-        let max_trade_count = 5;
-        let symbols = vec![STATIC_SYMBOL.to_string()];
+        let max_trade_count = max_trade_count;
+        let symbols = vec![requested_symbol.to_string()];
         let trading_algo_types = vec![AlgoTypes::HammerPatternAlgo];
-        let max_sl_hit_count = 2;
-        let targeted_pnl = 1000.0;
-        let targeted_pnl_percentage = 10.0;
-        let max_target_hit_count = 4;
-        let max_sl_capacity = -500.0;
-        let max_trade_capital = 4000000.0;
-        let user_id = ObjectId::from_str(STATIC_USER_ID).unwrap();
+        let max_sl_hit_count = max_sl_hit_count;
+        let targeted_pnl = targeted_pnl;
+        let targeted_pnl_percentage = targeted_pnl_percentage;
+        let max_target_hit_count = max_target_hit_count;
+        let max_sl_capacity = max_sl_capacity;
+        let max_trade_capital = max_trade_capital;
+        let user_id = ObjectId::from_str(requested_user_id).unwrap();
         let id = ObjectId::new();
-        println!("id => {:?}", id.clone());
-        let is_backtest_config = true;
+        let is_backtest_config = is_backtest_config;
         let new_pnl_configuration = PnLConfiguration::new(
             created_at,
             updated_at,
@@ -816,14 +830,16 @@ impl PnLConfiguration {
         );
 
         match pnl_configuration_collection
-            .insert_one(new_pnl_configuration, None)
+            .insert_one(new_pnl_configuration.clone(), None)
             .await
         {
             Ok(_) => {
                 println!("Successfully inserted new PnL configuration");
+                (Some(new_pnl_configuration), "Successfully inserted new PnL configuration".to_string())
             }
             Err(e) => {
                 println!("Error while inserting new PnL configuration: {}", e);
+                (None, e.to_string())
             }
         }
     }

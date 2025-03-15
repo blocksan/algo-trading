@@ -12,7 +12,7 @@ use data_consumer::current_market_state::CurrentMarketState;
 use futures::StreamExt;
 use order_manager::{
     order_dispatcher,
-    pnl_state::{CurrentPnLState, PnLConfiguration},
+    pnl_state::CurrentPnLState,
     trade_signal_keeper,
 };
 use std::sync::{Arc, Mutex as SyncMutex};
@@ -343,7 +343,7 @@ async fn main() {
                                     CurrentMarketState::calculate_market_state(
                                         &raw_stock,
                                         raw_stock.market_time_frame.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &raw_stock_ledger,
                                     )
                                     .await;
@@ -354,14 +354,14 @@ async fn main() {
                                         hammer_ledger.clone(),
                                         trade_keeper.clone(),
                                         order_manager.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
                                     monitor_trade::check_for_exit_opportunity(
                                         &mut order_manager,
                                         raw_stock.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;
@@ -375,7 +375,7 @@ async fn main() {
                                     monitor_trade::check_for_execute_opportunity(
                                         &mut order_manager,
                                         raw_stock.clone(),
-                                        redis_client.clone(),
+                                        redis_client,
                                         &mut locked_shared_order_ledger,
                                     )
                                     .await;

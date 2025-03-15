@@ -641,7 +641,7 @@ impl OrderManager {
             return order_exists;
         }
 
-        let filter = doc! {"order_cache_key": cache_key.clone() };
+        let filter = doc! {"order_cache_key": cache_key};
         let options: FindOneOptions = FindOneOptions::builder().build();
         order_exists = match order_collection.find_one(filter, options).await {
             Ok(Some(order)) => {
