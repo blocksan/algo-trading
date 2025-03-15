@@ -6,8 +6,7 @@ use crate::{config::mongodb_connection, common::date_parser};
 #[allow(dead_code)]
 #[derive(Debug,Clone, Serialize, Deserialize)]
 pub struct User {
-    #[serde(rename = "id", serialize_with = "serialize_object_id")]
-    #[serde(rename(deserialize = "_id"))]
+    #[serde(rename = "_id", serialize_with = "serialize_object_id")]
     pub id: ObjectId,
     pub name: String,
     pub email: String,

@@ -708,13 +708,13 @@ pub struct PnLConfiguration {
     pub max_sl_capacity: f32,
     pub max_trade_capital: f32,
     pub is_active: bool,
+    #[serde(rename = "user_id", serialize_with = "serialize_object_id")]
     pub user_id: ObjectId,
     pub time_frame: TimeFrame,
 
     pub is_backtest_config: bool,
 
-    #[serde(rename = "id", serialize_with = "serialize_object_id")]
-    #[serde(rename(deserialize = "_id"))]
+    #[serde(rename = "_id", serialize_with = "serialize_object_id")]
     pub id: ObjectId,
 }
 fn serialize_object_id<S>(oid: &ObjectId, s: S) -> Result<S::Ok, S::Error>
@@ -903,13 +903,14 @@ impl PnLConfiguration {
         }
 
         let options = FindOptions::builder().build();
+        println!("filter => {:?}", filter);
 
         // let cursor = pnl_configuration_collection.find(filter, options).await?.try_collect::<Vec<_>>().await?;
         let cursor = pnl_configuration_collection.find(filter, options).await;
         match cursor {
             Ok(_) => match cursor.unwrap().try_collect::<Vec<_>>().await {
                 Ok(data) => {
-                    // println!("Successfully fetched PnL configuration {:?}", pnl_configuration_found);
+                    println!("Successfully fetched PnL configuration {:?}", data);
                     Some(data) 
                 }
                 Err(e) => {
